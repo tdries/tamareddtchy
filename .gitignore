@@ -12,3 +12,4 @@ logs/
 .devvit/
 *.bak
 docs/screenshots/.tmp/
+.venv/
