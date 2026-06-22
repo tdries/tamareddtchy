@@ -1,0 +1,38 @@
+<svg width="640" height="200" viewBox="0 0 640 200" fill="none" xmlns="http://www.w3.org/2000/svg" font-family="'Fredoka', 'Trebuchet MS', sans-serif">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#7a5cff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#15121c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff4500"/>
+      <stop offset="100%" stop-color="#ff6a33"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6f9bff"/>
+      <stop offset="100%" stop-color="#8a5bff"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="200" rx="24" fill="#15121c"/>
+  <rect width="640" height="200" rx="24" fill="url(#glow)"/>
+
+  <!-- the creature: a blobby pet in its petri-dish spotlight -->
+  <ellipse cx="110" cy="158" rx="58" ry="12" fill="#ff4500" opacity="0.35"/>
+  <path d="M110 44c40 0 64 30 64 66 0 30-26 46-64 46S46 140 46 110c0-36 24-66 64-66z" fill="url(#body)"/>
+  <!-- little lumps for organic feel -->
+  <circle cx="64" cy="92" r="14" fill="#6f9bff"/>
+  <circle cx="156" cy="92" r="14" fill="#8a5bff"/>
+  <!-- eyes -->
+  <circle cx="92" cy="98" r="15" fill="#fff"/>
+  <circle cx="130" cy="98" r="15" fill="#fff"/>
+  <circle cx="95" cy="101" r="7" fill="#161616"/>
+  <circle cx="133" cy="101" r="7" fill="#161616"/>
+  <!-- orbiting gene star -->
+  <path d="M186 56l5 12 12 5-12 5-5 12-5-12-12-5 12-5z" fill="#2fd07a"/>
+
+  <!-- wordmark -->
+  <text x="214" y="104" font-size="52" font-weight="700" fill="#f4eeff" letter-spacing="0.5">Tamareddtchy</text>
+  <text x="216" y="140" font-size="18" font-weight="600" fill="#b9aed0">your Reddit soul, raised as a 3D pet</text>
+  <circle cx="206" cy="150" r="0" fill="none"/>
+  <rect x="214" y="152" width="290" height="4" rx="2" fill="url(#orange)"/>
+</svg>
