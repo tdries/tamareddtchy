@@ -1,0 +1,14 @@
+node_modules/
+dist/
+webroot/
+.next/
+.DS_Store
+.vscode/
+*.log
+logs/
+.env
+.env.local
+.env.*.local
+.devvit/
+*.bak
+docs/screenshots/.tmp/
