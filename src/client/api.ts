@@ -3,7 +3,7 @@
 // in-memory mock seeded with a few rival creatures so every screen has content.
 // Same shapes either way, so the UI never knows the difference.
 
-import { type Gene, type Genome, dominantGenes } from "../shared/genome.js";
+import { GENES, type Gene, type Genome, dominantGenes } from "../shared/genome.js";
 import {
   type Creature,
   type FeedKind,
@@ -55,17 +55,22 @@ const ME = "u_me";
 const MY_NAME = "you";
 
 function seedRivals(): Creature[] {
-  const mk = (id: string, name: string, diet: Gene[], gen: number, xp = 500): Creature => {
-    let c = hatch({ id, ownerId: id, name, homeSub: "tamareddtchy", diet, now: now() - 86_400_000 });
-    c = { ...c, xp, generation: gen };
-    return c;
+  // Rivals are DEVELOPED adults, not freshly hatched eggs. A real opponent has a
+  // substantial genome (a few hundred points), otherwise breeding with it is
+  // lopsided and the offspring just looks like the bigger parent. `weights` are
+  // relative; we scale them up to a believable adult magnitude.
+  const mk = (id: string, name: string, gen: number, weights: Partial<Record<Gene, number>>): Creature => {
+    const base = hatch({ id, ownerId: id, name, homeSub: "tamareddtchy", diet: [], now: now() - 86_400_000 });
+    const genome = { ...base.genome };
+    for (const g of GENES) genome[g] = Math.round((weights[g] ?? 0) * 28);
+    return { ...base, genome, xp: 520, generation: gen };
   };
   return [
-    mk("u_athena", "Athena", ["knowledge", "knowledge", "lore", "craft"], 3),
-    mk("u_brawn", "Brawn", ["vitality", "vitality", "social", "pulse"], 2),
-    mk("u_jester", "Jester", ["mayhem", "mayhem", "fiction", "heart"], 4),
-    mk("u_sage", "Sage", ["inner", "earth", "knowledge", "lore"], 2),
-    mk("u_spark", "Spark", ["tech", "tech", "pulse", "mayhem"], 1),
+    mk("u_athena", "Athena", 3, { knowledge: 5, lore: 4, craft: 3, inner: 2 }),
+    mk("u_brawn", "Brawn", 2, { vitality: 5, social: 4, pulse: 4, mayhem: 2 }),
+    mk("u_jester", "Jester", 4, { mayhem: 5, fiction: 4, heart: 3, social: 2 }),
+    mk("u_sage", "Sage", 2, { inner: 5, earth: 4, lore: 3, knowledge: 2 }),
+    mk("u_spark", "Spark", 1, { tech: 5, pulse: 4, mayhem: 3, fiction: 2 }),
   ];
 }
 

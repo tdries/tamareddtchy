@@ -7,6 +7,7 @@ import {
   blend,
   complement,
   complementarity,
+  dominantGenes,
 } from "./genome.js";
 import {
   hatch,
@@ -80,6 +81,28 @@ describe("blend rewards complementary parents (the central balance claim)", () =
     expect(scoreGenetics(complementaryChild)).toBeGreaterThan(
       scoreGenetics(similarChild),
     );
+  });
+
+  it("a child of differently-sized parents inherits from BOTH, not just the big one", () => {
+    // The bug: a large player (855 mag) bred with a small rival (72 mag) used to
+    // produce a child that was just a shrunk copy of the large parent, because
+    // blend averaged raw values. The child must carry the small parent's identity
+    // too: its dominant genes must differ from the big parent's, and it must be
+    // strong in at least one of the small parent's top genes.
+    const big = genomeFrom({
+      knowledge: 140, vitality: 60, tech: 120, heart: 40, craft: 90, mayhem: 35,
+      pulse: 30, lore: 95, inner: 80, social: 25, earth: 110, fiction: 30,
+    });
+    const small = genomeFrom({ vitality: 36, pulse: 18, social: 18 }); // tiny, opposite-ish
+    const child = blend(big, small);
+
+    const bigDom = dominantGenes(big)[0]; // knowledge
+    const childDom = dominantGenes(child).slice(0, 4);
+    // The child must not simply mirror the big parent's whole dominance order.
+    expect(childDom).not.toEqual(dominantGenes(big).slice(0, 4));
+    // The child must be visibly strong in the small parent's signature gene.
+    const smallTop = dominantGenes(small)[0]; // vitality
+    expect(child[smallTop]).toBeGreaterThan(child[bigDom] * 0.5);
   });
 
   it("complementarity is high for opposites and low for twins", () => {

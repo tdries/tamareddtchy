@@ -112,18 +112,42 @@ export function scoreGenetics(g: Genome): number {
   return Math.round((0.4 * magTerm + 0.6 * devTerm) * 100);
 }
 
-// Offspring genome from two parents. Each gene is the average of the parents,
-// nudged toward the stronger parent on that gene. The payoff comes from
-// COMPLEMENTARY parents: when one parent is high where the other is low, the
-// child ends up strong on both sides of those pairs, which scoreGenetics
-// rewards. Two similar parents average to a mushy middle and score poorly.
+// Offspring genome from two parents.
+//
+// The key idea: a creature passes on its genetic SIGNATURE (which genes dominate,
+// as a proportion of itself), not its raw size. A small creature that is purely
+// Vitality is "100% Vitality" and passes that on just as strongly as a huge
+// creature passes its dominant gene. So we mix the two parents' NORMALIZED
+// profiles in equal measure, then scale the result up to a child magnitude. This
+// is what makes a real mix: blend a Knowledge giant with a tiny Vitality rival
+// and the child is genuinely Knowledge AND Vitality, not just a shrunk giant.
+//
+// Averaging raw values (the old approach) let the bigger parent dominate the
+// child's shape entirely whenever the parents differed in size, which made every
+// preview look like the larger parent.
 export function blend(a: Genome, b: Genome): Genome {
+  const magA = totalMagnitude(a) || 1;
+  const magB = totalMagnitude(b) || 1;
+
+  // Each parent contributes its profile (gene / own total), weighted equally.
+  // Genes where the two profiles diverge get a hybrid-vigor boost, so crossing
+  // distant gene pools yields a broadly-developed child (the design's payoff).
   const child = emptyGenome();
+  let raw = 0;
   for (const gene of GENES) {
-    const avg = (a[gene] + b[gene]) / 2;
-    const hybridVigor = Math.abs(a[gene] - b[gene]) * 0.35; // reward divergence
-    child[gene] = Math.round(avg + hybridVigor);
+    const pa = a[gene] / magA; // a's share of itself on this gene
+    const pb = b[gene] / magB; // b's share of itself on this gene
+    const mixed = (pa + pb) / 2;
+    const hybridVigor = Math.abs(pa - pb) * 0.5; // reward divergence between profiles
+    child[gene] = mixed + hybridVigor;
+    raw += child[gene];
   }
+
+  // Scale the mixed profile up to a child magnitude: the average of the parents'
+  // sizes, so a child is roughly as substantial as its parents rather than tiny.
+  const targetMag = (magA + magB) / 2;
+  const scale = raw > 0 ? targetMag / raw : 0;
+  for (const gene of GENES) child[gene] = Math.round(child[gene] * scale);
   return child;
 }
 
