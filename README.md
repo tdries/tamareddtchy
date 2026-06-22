@@ -67,6 +67,10 @@ Every other creature in the subreddit, ranked by how complementary it is to your
 
 ![Mate market](docs/screenshots/03-mate.png)
 
+While a mating incubates, the "Your matings" panel shows both parents side by side and a live 3D preview of exactly how their offspring will look. The preview is not a guess: the child genome is the same blend that produces the real baby on success, so you can see the kid you are gambling on before the timer ends.
+
+![Incubating with offspring preview](docs/screenshots/05-incubating-preview.png)
+
 ### Lineage board: three ways to win
 
 The leaderboard ranks players by lineage score, which blends generation depth, genetics quality, and how many viable offspring you have raised. No single strategy dominates.

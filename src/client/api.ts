@@ -37,6 +37,7 @@ export type { MateRequest };
 export interface RequestView {
   req: MateRequest;
   partnerName: string;
+  myCreature: Creature | null; // the proposer's parent
   partnerCreature: Creature | null;
   offspring: Creature | null; // populated once hatched, if it is mine
 }
@@ -270,9 +271,11 @@ export async function myRequests(): Promise<RequestView[]> {
     .reverse()
     .map((r) => {
       const partner = mock.creatures.get(r.toCreatureId) ?? null;
+      const mine = mock.creatures.get(r.fromCreatureId) ?? null;
       return {
         req: r,
         partnerName: partner?.name ?? "someone",
+        myCreature: mine,
         partnerCreature: partner,
         offspring: mock.offspringByReq.get(r.id) ?? null,
       };

@@ -12,6 +12,7 @@ import {
   dominantGenes,
   scoreGenetics,
   pairBalance,
+  blend,
   type Gene,
 } from "../shared/genome.js";
 import { type FeedKind, stage } from "../shared/creature.js";
@@ -25,6 +26,7 @@ const GENE_HUE = (g: Gene) => `var(--g-${g})`;
 let state: api.State;
 let nurseryScene: CreatureScene | null = null;
 const miniScenes: CreatureScene[] = [];
+let trioScenes: CreatureScene[] = []; // parents + child preview in incubating rows
 let requestPoll: number | null = null;
 
 type Tab = "nursery" | "mate" | "board";
@@ -41,7 +43,14 @@ function disposeScenes() {
   nurseryScene?.dispose();
   nurseryScene = null;
   while (miniScenes.length) miniScenes.pop()!.dispose();
+  disposeTrioScenes();
   if (requestPoll) { clearTimeout(requestPoll); requestPoll = null; }
+}
+
+// The incubating-row 3D scenes are rebuilt on every poll tick, so dispose the
+// previous batch each time to avoid leaking WebGL contexts.
+function disposeTrioScenes() {
+  while (trioScenes.length) trioScenes.pop()!.dispose();
 }
 
 function toast(msg: string) {
@@ -267,6 +276,7 @@ async function renderMate() {
 
 // The follow-up panel: every mate request you have sent, with live status and a
 // gestation progress bar. Polls itself while anything is in flight.
+let lastReqSig = "";
 async function renderRequests() {
   const host = view.querySelector("#requests");
   if (!host) return;
@@ -275,23 +285,71 @@ async function renderRequests() {
 
   if (reqs.length === 0) {
     host.innerHTML = "";
+    lastReqSig = "";
+    disposeTrioScenes();
     if (requestPoll) { clearTimeout(requestPoll); requestPoll = null; }
     return;
   }
 
+  // Only rebuild the DOM (and the 3D preview scenes) when a request's STATUS
+  // changes. Between status changes we just nudge the progress bars in place, so
+  // the live previews do not flicker every poll during a long incubation.
+  const sig = reqs.map((rv) => `${rv.req.id}:${rv.req.status}`).join("|");
+  if (sig === lastReqSig) {
+    reqs.forEach((rv, i) => {
+      if (rv.req.status !== "incubating") return;
+      const prog = mating.gestationProgress(rv.req, now) * 100;
+      const bar = host.querySelectorAll(".req-row")[i]?.querySelector<HTMLElement>(".bar.inc > span");
+      if (bar) bar.style.width = `${prog}%`;
+    });
+    requestPoll = window.setTimeout(renderRequests, 1500);
+    return;
+  }
+  lastReqSig = sig;
+  disposeTrioScenes(); // status changed: tear down old preview scenes, rebuild
+
   host.innerHTML = `
     <h2 class="section-h">Your matings</h2>
     <div class="req-list">
-      ${reqs.map((rv) => {
+      ${reqs.map((rv, idx) => {
         const r = rv.req;
         const prog = Math.round(mating.gestationProgress(r, now) * 100);
         const chance = Math.round(r.successChance * 100);
         let badge = "", detail = "", cls = "";
         if (r.status === "pending") { badge = "waiting for accept"; detail = `${rv.partnerName} has not answered yet`; cls = "st-pending"; }
-        else if (r.status === "incubating") { badge = "incubating"; detail = `${prog}% . ${chance}% chance it takes`; cls = "st-inc"; }
+        else if (r.status === "incubating") { badge = "incubating"; detail = `${prog}% incubated . ${chance}% chance it takes`; cls = "st-inc"; }
         else if (r.status === "hatched") { badge = "hatched!"; detail = rv.offspring ? `Gen-${rv.offspring.generation} ${rv.offspring.name}, genetics ${scoreGenetics(rv.offspring.genome)}` : "a new creature was born"; cls = "st-ok"; }
         else if (r.status === "failed") { badge = "failed"; detail = "no offspring, cooldown spent. try again"; cls = "st-fail"; }
         else { badge = "declined"; detail = `${rv.partnerName} said no`; cls = "st-fail"; }
+
+        // While incubating, show both parents and a live preview of how their
+        // offspring will look. The preview is exact, not a guess: the child
+        // genome is blend(parentA, parentB), the same function that makes the
+        // real baby on success.
+        let trio = "";
+        if (r.status === "incubating" && rv.myCreature && rv.partnerCreature) {
+          const childGenome = blend(rv.myCreature.genome, rv.partnerCreature.genome);
+          const childGen = Math.max(rv.myCreature.generation, rv.partnerCreature.generation) + 1;
+          const childScore = scoreGenetics(childGenome);
+          trio = `
+            <div class="req-trio" data-row="${idx}">
+              <div class="trio-cell">
+                <div class="trio-viz" data-which="mine"></div>
+                <div class="trio-label">${rv.myCreature.name}<small>Gen-${rv.myCreature.generation}</small></div>
+              </div>
+              <div class="trio-plus">+</div>
+              <div class="trio-cell">
+                <div class="trio-viz" data-which="partner"></div>
+                <div class="trio-label">${rv.partnerName}<small>Gen-${rv.partnerCreature.generation}</small></div>
+              </div>
+              <div class="trio-arrow">&rarr;</div>
+              <div class="trio-cell child">
+                <div class="trio-viz" data-which="child"></div>
+                <div class="trio-label">preview<small>Gen-${childGen} . genetics ${childScore}</small></div>
+              </div>
+            </div>`;
+        }
+
         return `
           <div class="req-row ${cls}">
             <div class="req-main">
@@ -300,9 +358,30 @@ async function renderRequests() {
             </div>
             <div class="req-detail">${detail}</div>
             ${r.status === "incubating" ? `<div class="bar inc"><span style="width:${prog}%"></span></div>` : ""}
+            ${trio}
           </div>`;
       }).join("")}
     </div>`;
+
+  // Mount the live 3D parents + offspring preview for each incubating row.
+  host.querySelectorAll<HTMLElement>(".req-trio").forEach((trioEl) => {
+    const idx = Number(trioEl.dataset.row);
+    const rv = reqs[idx];
+    if (!rv.myCreature || !rv.partnerCreature) return;
+    const childGenome = blend(rv.myCreature.genome, rv.partnerCreature.genome);
+    const childGen = Math.max(rv.myCreature.generation, rv.partnerCreature.generation) + 1;
+    const mount = (sel: string, genome: typeof childGenome, gen: number, xp: number) => {
+      const el = trioEl.querySelector<HTMLElement>(`.trio-viz[data-which="${sel}"]`);
+      if (!el) return;
+      const s = new CreatureScene(el);
+      s.setCreature(genome, gen, xp);
+      trioScenes.push(s);
+    };
+    mount("mine", rv.myCreature.genome, rv.myCreature.generation, rv.myCreature.xp);
+    mount("partner", rv.partnerCreature.genome, rv.partnerCreature.generation, rv.partnerCreature.xp);
+    // Preview the child as a small egg/blob so it reads as "incubating", not grown.
+    mount("child", childGenome, childGen, 60);
+  });
 
   // Keep refreshing while anything is pending or incubating.
   const live = reqs.some((rv) => rv.req.status === "pending" || rv.req.status === "incubating");
