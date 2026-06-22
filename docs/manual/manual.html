@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tamareddtchy Operator Manual</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #15121c;
+    --panel: #241d31;
+    --panel-2: #2c2440;
+    --ink: #f4eeff;
+    --ink-2: #b9aed0;
+    --ink-3: #8478a0;
+    --orange: #ff4500;
+    --orange-2: #ff6a33;
+    --glow: #7a5cff;
+    --green: #2fd07a;
+    --hairline: #3a3150;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: A4 portrait; margin: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: 'Nunito', sans-serif; color: var(--ink); background: var(--bg); }
+
+  .page {
+    width: 210mm; height: 297mm;
+    padding: 18mm 18mm 16mm 18mm;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .page:last-child { page-break-after: auto; }
+
+  h1, h2, h3, .eyebrow, .num { font-family: 'Fredoka', sans-serif; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 3px; font-size: 10pt; color: var(--orange); font-weight: 600; margin-bottom: 4mm; }
+  h2 { font-size: 26pt; font-weight: 700; line-height: 1.05; margin-bottom: 4mm; }
+  h3 { font-size: 14pt; font-weight: 600; color: var(--glow); margin: 6mm 0 2mm; }
+  p { font-size: 11pt; line-height: 1.6; color: var(--ink-2); margin-bottom: 3mm; }
+  b, strong { color: var(--ink); font-weight: 700; }
+
+  .footer {
+    position: absolute; left: 18mm; right: 18mm; bottom: 12mm;
+    display: flex; justify-content: space-between;
+    font-size: 8.5pt; color: var(--ink-3); border-top: 1px solid var(--hairline);
+    padding-top: 3mm;
+  }
+
+  .screenshot { width: 100%; border: 1px solid var(--hairline); border-radius: 3mm; box-shadow: 0 2mm 6mm rgba(0,0,0,0.4); margin: 4mm 0; }
+
+  /* cover */
+  .cover, .closing {
+    width: 210mm; height: 297mm; page-break-after: always;
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(120mm 120mm at 50% 36%, rgba(122,92,255,0.35), transparent 70%),
+      radial-gradient(90mm 90mm at 80% 100%, rgba(255,69,0,0.18), transparent 60%),
+      var(--bg);
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; padding: 30mm;
+  }
+  .cover .logo { width: 150mm; margin-bottom: 8mm; }
+  .cover h1 { font-family: 'Fredoka', sans-serif; font-size: 46pt; font-weight: 700; margin-bottom: 4mm; }
+  .cover .tag { font-size: 14pt; color: var(--ink-2); max-width: 150mm; }
+  .cover .meta { position: absolute; bottom: 24mm; font-size: 10pt; color: var(--ink-3); }
+  .cover .accent { width: 40mm; height: 2mm; background: linear-gradient(90deg, var(--orange), var(--orange-2)); border-radius: 2mm; margin: 8mm 0; }
+
+  .closing h1 { font-family: 'Fredoka', sans-serif; font-size: 40pt; font-weight: 700; margin-bottom: 5mm; }
+  .closing p { font-size: 13pt; color: var(--ink-2); }
+  .closing .link { color: var(--orange-2); font-weight: 700; font-size: 12pt; margin-top: 6mm; }
+
+  /* toc */
+  .toc-item { display: flex; align-items: baseline; gap: 4mm; padding: 3.5mm 0; border-bottom: 1px solid var(--hairline); }
+  .toc-item .n { font-family: 'Fredoka', sans-serif; color: var(--orange); font-size: 13pt; width: 12mm; }
+  .toc-item .t { font-family: 'Fredoka', sans-serif; color: var(--ink); font-size: 13pt; }
+  .toc-item .d { color: var(--ink-3); font-size: 9.5pt; flex: 1; }
+  .toc-item .pg { color: var(--ink-2); font-size: 11pt; }
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 10pt; }
+  th { text-align: left; color: var(--orange); font-family: 'Fredoka', sans-serif; font-weight: 600; padding: 2.5mm 3mm; border-bottom: 1.5px solid var(--orange); font-size: 9.5pt; }
+  td { padding: 2.5mm 3mm; border-bottom: 1px solid var(--hairline); color: var(--ink-2); vertical-align: top; }
+  td b { color: var(--ink); }
+
+  /* cards / pills */
+  .cards { display: flex; gap: 4mm; margin: 4mm 0; }
+  .card { flex: 1; background: var(--panel); border: 1px solid var(--hairline); border-radius: 3mm; padding: 5mm; }
+  .card .big { font-family: 'Fredoka', sans-serif; font-size: 22pt; color: var(--glow); font-weight: 700; }
+  .card .lbl { font-size: 9pt; color: var(--ink-3); margin-top: 1mm; }
+  .pull { border-left: 3px solid var(--orange); padding: 3mm 0 3mm 5mm; margin: 5mm 0; font-size: 13pt; color: var(--ink); font-style: italic; }
+  .codeblock { background: #0f0d15; border: 1px solid var(--hairline); border-radius: 2mm; padding: 4mm 5mm; font-family: 'SF Mono', Menlo, monospace; font-size: 9.5pt; color: var(--green); line-height: 1.7; white-space: pre; overflow: hidden; margin: 3mm 0; }
+  .step { display: flex; gap: 4mm; margin: 3mm 0; }
+  .step .sn { font-family: 'Fredoka', sans-serif; color: var(--orange); font-weight: 700; font-size: 12pt; min-width: 8mm; }
+  .ascii { font-family: 'SF Mono', Menlo, monospace; font-size: 9pt; color: var(--ink-2); line-height: 1.5; white-space: pre; background: var(--panel); border: 1px solid var(--hairline); border-radius: 2mm; padding: 5mm; margin: 4mm 0; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<section class="cover">
+  <img class="logo" src="../logo.svg" alt="Tamareddtchy" />
+  <h1>Operator Manual</h1>
+  <div class="accent"></div>
+  <p class="tag">How to run, play, and ship the virtual pet whose body is a living 3D readout of your Reddit personality.</p>
+  <div class="meta">Version 0.1 &nbsp;.&nbsp; Built for Reddit's Games with a Hook &nbsp;.&nbsp; June 2026</div>
+</section>
+
+<!-- TOC -->
+<section class="page">
+  <div class="eyebrow">Contents</div>
+  <h2>What is in this manual</h2>
+  <div style="margin-top:8mm">
+    <div class="toc-item"><span class="n">01</span><span class="t">The problem</span><span class="d">why Reddit games die on day three</span><span class="pg">3</span></div>
+    <div class="toc-item"><span class="n">02</span><span class="t">What it does</span><span class="d">the pet, the genome, the loop</span><span class="pg">4</span></div>
+    <div class="toc-item"><span class="n">03</span><span class="t">The genome</span><span class="d">12 genes, 6 opposite pairs</span><span class="pg">5</span></div>
+    <div class="toc-item"><span class="n">04</span><span class="t">Anatomy</span><span class="d">how a body is grown from genes</span><span class="pg">6</span></div>
+    <div class="toc-item"><span class="n">05</span><span class="t">The breeding economy</span><span class="d">generations, deals, lineage score</span><span class="pg">7</span></div>
+    <div class="toc-item"><span class="n">06</span><span class="t">Walkthrough: hatch</span><span class="d">the onboarding diet picker</span><span class="pg">8</span></div>
+    <div class="toc-item"><span class="n">07</span><span class="t">Walkthrough: nursery</span><span class="d">feeding and growth</span><span class="pg">9</span></div>
+    <div class="toc-item"><span class="n">08</span><span class="t">Walkthrough: genome card</span><span class="d">your build, shareable</span><span class="pg">10</span></div>
+    <div class="toc-item"><span class="n">09</span><span class="t">Walkthrough: mate market</span><span class="d">finding your opposite</span><span class="pg">11</span></div>
+    <div class="toc-item"><span class="n">10</span><span class="t">Architecture</span><span class="d">client, server, shared rules</span><span class="pg">12</span></div>
+    <div class="toc-item"><span class="n">11</span><span class="t">Run and ship</span><span class="d">local, tests, publish to Reddit</span><span class="pg">13</span></div>
+  </div>
+  <div class="footer"><span>Tamareddtchy Operator Manual</span><span>2</span></div>
+</section>
+
+<!-- 01 PROBLEM -->
+<section class="page">
+  <div class="eyebrow">01 . The problem</div>
+  <h2>Reddit games die on day three</h2>
+  <p>They spike on launch day and vanish by the weekend. Two things are missing every time: a reason to come back, and a reason to care about anyone else playing. Tamareddtchy is designed backwards from the return visit.</p>
+  <table>
+    <tr><th>Today</th><th>With Tamareddtchy</th></tr>
+    <tr><td>You lurk your usual subs and never leave them</td><td><b>Your best move is to find your opposite and team up</b></td></tr>
+    <tr><td>A game post is played once and scrolled past</td><td><b>Your creature posts itself when it grows, hatches, or breeds</b></td></tr>
+    <tr><td>Engagement is an abstract number</td><td><b>Engagement is the food that shapes a creature you are attached to</b></td></tr>
+    <tr><td>Winning is a high score nobody remembers</td><td><b>Winning is a visible, multi generation lineage you built with others</b></td></tr>
+  </table>
+  <div class="pull">It is a game about leaving your bubble, dressed up as a pet you cannot stop checking on.</div>
+  <div class="footer"><span>01 . The problem</span><span>3</span></div>
+</section>
+
+<!-- 02 WHAT IT DOES -->
+<section class="page">
+  <div class="eyebrow">02 . What it does</div>
+  <h2>A pet whose body is your Reddit personality</h2>
+  <p>You hatch a small creature. From that moment its body is a pure function of what you do on Reddit. The creature is never stored as a picture. It is rebuilt in 3D, every frame, from twelve numbers.</p>
+  <div class="cards">
+    <div class="card"><div class="big">12</div><div class="lbl">genes drive the body</div></div>
+    <div class="card"><div class="big">6</div><div class="lbl">opposite pairs</div></div>
+    <div class="card"><div class="big">0</div><div class="lbl">3D model files</div></div>
+  </div>
+  <h3>The loop</h3>
+  <p><b>Hatch</b> by picking the corners of Reddit you live in. <b>Feed</b> by reading, commenting, and posting, which pushes points into genes and reshapes the body. <b>Grow</b> from egg to adult across days of nurture, with hunger that decays in real time. <b>Breed</b> with a complementary partner to climb the generations.</p>
+  <h3>The four scoring hooks</h3>
+  <p><b>Hook:</b> a creature that droops when ignored and a streak you do not want to break. <b>Retention:</b> real time hunger, multi day generation climbs, mate requests that resolve on a return visit. <b>User contributions:</b> every milestone renders an image and posts itself. <b>Reddit-y:</b> the mechanic is upvoting, commenting, and cross community rivalry.</p>
+  <div class="footer"><span>02 . What it does</span><span>4</span></div>
+</section>
+
+<!-- 03 GENOME -->
+<section class="page">
+  <div class="eyebrow">03 . The genome</div>
+  <h2>12 genes, 6 opposite pairs</h2>
+  <p>The genome is the whole game. Everything visual and every score derives from these twelve numbers. They are arranged as six complementary opposite pairs, which is what makes "crossing distant gene pools" a real mechanic.</p>
+  <table>
+    <tr><th>Pair</th><th>Gene A</th><th>Gene B</th><th>Example subreddits</th></tr>
+    <tr><td>Mind vs Body</td><td><b>Knowledge</b></td><td><b>Vitality</b></td><td>r/science . r/fitness</td></tr>
+    <tr><td>Logic vs Feeling</td><td><b>Tech</b></td><td><b>Heart</b></td><td>r/programming . r/aww</td></tr>
+    <tr><td>Order vs Chaos</td><td><b>Craft</b></td><td><b>Mayhem</b></td><td>r/DIY . r/funny</td></tr>
+    <tr><td>Now vs Forever</td><td><b>Pulse</b></td><td><b>Lore</b></td><td>r/news . r/history</td></tr>
+    <tr><td>Self vs World</td><td><b>Inner</b></td><td><b>Social</b></td><td>r/meditation . r/AskReddit</td></tr>
+    <tr><td>Real vs Dream</td><td><b>Earth</b></td><td><b>Fiction</b></td><td>r/space . r/movies</td></tr>
+  </table>
+  <h3>What good genetics means</h3>
+  <p>Not a high score on one gene. Good genetics means <b>both sides of many pairs are developed</b>. A creature strong in both Knowledge and Vitality is fitter than one that only grinds Knowledge. You can only reach that by breeding with someone unlike you, which is the entire point.</p>
+  <div class="footer"><span>03 . The genome</span><span>5</span></div>
+</section>
+
+<!-- 04 ANATOMY -->
+<section class="page">
+  <div class="eyebrow">04 . Anatomy</div>
+  <h2>How a body is grown from genes</h2>
+  <p>Each of six body slots is owned by exactly one pair. The pair's balance picks the shape; the pair's magnitude picks the size. Generation pushes the whole rig further from the baseline blob, so lineage depth is visible at a glance.</p>
+  <table>
+    <tr><th>Body slot</th><th>Driven by</th><th>What it shows</th></tr>
+    <tr><td><b>Head</b></td><td>Knowledge / Vitality</td><td>domed brain-head vs sleek athletic head</td></tr>
+    <tr><td><b>Eyes</b></td><td>Tech / Heart</td><td>small visor eyes vs big warm doe eyes</td></tr>
+    <tr><td><b>Torso</b></td><td>Craft / Mayhem</td><td>tidy geometric shell vs lumpy chaotic blob</td></tr>
+    <tr><td><b>Arms</b></td><td>Pulse / Lore</td><td>antenna arms vs scroll arms</td></tr>
+    <tr><td><b>Legs</b></td><td>Inner / Social</td><td>single rooted base vs many running legs</td></tr>
+    <tr><td><b>Aura</b></td><td>Earth / Fiction</td><td>orbiting leaves vs a wizard hat</td></tr>
+  </table>
+  <p>Two whole-genome derivations finish the look: the <b>palette</b> comes from the two highest genes, and the <b>growth stage</b> (egg, blob, child, adult) comes from total nurture. All of it is computed live in Three.js. Nothing is downloaded.</p>
+  <div class="footer"><span>04 . Anatomy</span><span>6</span></div>
+</section>
+
+<!-- 05 ECONOMY -->
+<section class="page">
+  <div class="eyebrow">05 . The breeding economy</div>
+  <h2>Opposites win, twins make a mess</h2>
+  <p>Mating is a deal between two players, not a symmetric merge. Exactly one offspring is produced and exactly one player owns it. Who keeps it, and what is traded for it, is negotiated. That negotiation is the strategy.</p>
+  <table>
+    <tr><th>Pairing</th><th>Produces</th><th>The strategy</th></tr>
+    <tr><td><b>Gen-1 x Gen-1</b></td><td>a plain Gen-2</td><td>cheap starter, breed wide for offspring count</td></tr>
+    <tr><td><b>Gen-3 x Gen-3</b></td><td>a strong Gen-4</td><td>both want the kid, a hard-fought deal</td></tr>
+    <tr><td><b>Gen-5 x Gen-1</b></td><td>an advanced Gen-6</td><td>the Gen-5 holder has the leverage and can demand a price</td></tr>
+  </table>
+  <p><b>Cost to mate:</b> a big hunger hit plus a multi day cooldown, so climbing the generation ladder costs real nurture time. <b>Generation</b> of a child is max(parents) + 1, which is why pairing with a higher generation partner pulls your lineage forward.</p>
+  <h3>The win metric: lineage score</h3>
+  <p>Lineage score blends three axes so no single track dominates: <b>depth</b> (deeper generations are worth exponentially more), <b>quality</b> (complementary, developed genomes score high, inbred ones do not), and <b>breadth</b> (every viable offspring adds a bonus).</p>
+  <div class="footer"><span>05 . The breeding economy</span><span>7</span></div>
+</section>
+
+<!-- 06 HATCH -->
+<section class="page">
+  <div class="eyebrow">06 . Walkthrough</div>
+  <h2>Hatch: tell it who you are</h2>
+  <p>On first run, the player picks the corners of Reddit they actually frequent. This seeds the genome so the creature looks like them from minute one instead of starting blank. It is honest input: a self declared diet, not a scrape of private history.</p>
+  <img class="screenshot" src="../screenshots/00-onboarding.png" alt="Onboarding diet picker" />
+  <p>Each tile is a gene with the real subreddits it stands for. Pick a few, name the creature, and hatch. The creature is born as a Gen-1 egg already leaning toward the chosen genes.</p>
+  <div class="footer"><span>06 . Walkthrough: hatch</span><span>8</span></div>
+</section>
+
+<!-- 07 NURSERY -->
+<section class="page">
+  <div class="eyebrow">07 . Walkthrough</div>
+  <h2>Nursery: a living 3D pet</h2>
+  <p>The creature breathes, blinks, bobs, and droops when neglected. Drag to spin it. Every feed pushes points into a gene and visibly reshapes the body over time.</p>
+  <img class="screenshot" src="../screenshots/01-nursery.png" alt="Nursery with the 3D creature" />
+  <p>The panel shows the growth stage, the generation badge, the needs (fed level, growth to next stage, daily streak), and the dominant genes. The "visit an opposite sub" feed action deliberately develops the lagging side of a pair, nudging you toward better genetics.</p>
+  <div class="footer"><span>07 . Walkthrough: nursery</span><span>9</span></div>
+</section>
+
+<!-- 08 GENOME CARD -->
+<section class="page">
+  <div class="eyebrow">08 . Walkthrough</div>
+  <h2>Genome card: your build, shareable</h2>
+  <p>The "what's your build" card. A single genetics score out of 100 and the six opposite pairs drawn as tug of war bars. This is the screenshot people post to argue about whether someone is really Mayhem dominant.</p>
+  <img class="screenshot" src="../screenshots/02-genome.png" alt="Genome card" />
+  <p>The score rewards broad development, not lopsided grinding, so a high number is proof you have crossed gene pools. It is identity flavored on purpose, because identity is what Reddit loves to debate.</p>
+  <div class="footer"><span>08 . Walkthrough: genome card</span><span>10</span></div>
+</section>
+
+<!-- 09 MATE -->
+<section class="page">
+  <div class="eyebrow">09 . Walkthrough</div>
+  <h2>Mate market: find your opposite</h2>
+  <p>Every other creature in the subreddit, ranked by how complementary it is to yours, and each rendered live in 3D from its own genome. The strong matches are at the top.</p>
+  <img class="screenshot" src="../screenshots/03-mate.png" alt="Mate market" />
+  <p>Proposing is a deal: you state who keeps the single offspring and what you trade for it. A strong match makes a healthy, well developed child. Mating two similar creatures makes a busted, comedic, inbred one that is genuinely fun to show off.</p>
+  <div class="footer"><span>09 . Walkthrough: mate market</span><span>11</span></div>
+</section>
+
+<!-- 10 ARCHITECTURE -->
+<section class="page">
+  <div class="eyebrow">10 . Architecture</div>
+  <h2>Client, server, shared rules</h2>
+  <p>One Devvit Web app, published as a single Interactive Post. The shared game logic is imported by the client, the server, and the tests, so the rules can never drift.</p>
+  <div class="ascii">  Reddit subreddit
+        |
+        v
+  +------------------+      +----------------------+
+  |  Web view post   | <--> |   Devvit server      |
+  |  Three.js + UI   | http |   Redis + Reddit API |
+  +------------------+      +----------------------+
+        |                            |
+        +------------+---------------+
+                     v
+            src/shared (genome,
+            scoring, breeding)
+            also run by the tests</div>
+  <table>
+    <tr><th>Component</th><th>Role</th><th>File</th></tr>
+    <tr><td>Genome model</td><td>genes, scoring, breeding, lineage</td><td>src/shared/genome.ts, creature.ts</td></tr>
+    <tr><td>Procedural 3D</td><td>grows geometry from the genome</td><td>src/client/render.ts</td></tr>
+    <tr><td>Living scene</td><td>Three.js scene + animation</td><td>src/client/scene.ts</td></tr>
+    <tr><td>Devvit server</td><td>Redis endpoints, deals, posts</td><td>src/server/index.ts</td></tr>
+    <tr><td>App config</td><td>post, server, menu, permissions</td><td>devvit.json</td></tr>
+  </table>
+  <div class="footer"><span>10 . Architecture</span><span>12</span></div>
+</section>
+
+<!-- 11 RUN -->
+<section class="page">
+  <div class="eyebrow">11 . Run and ship</div>
+  <h2>From a cold clone to a live post</h2>
+  <h3>Play it standalone (no Reddit account)</h3>
+  <p>An in-memory world makes the whole game playable locally. Fastest way to see it.</p>
+  <div class="codeblock">git clone https://github.com/tdries/tamareddtchy.git
+cd tamareddtchy
+npm install
+npm run dev      # open the printed URL, add ?demo=1</div>
+  <h3>Run the tests</h3>
+  <div class="codeblock">npm test         # game-balance + render structure, in plain Node</div>
+  <h3>Publish to Reddit</h3>
+  <div class="step"><span class="sn">1</span><p style="margin:0"><b>devvit login</b> to authenticate your Reddit account.</p></div>
+  <div class="step"><span class="sn">2</span><p style="margin:0"><b>devvit upload</b> to upload the app (pulls @devvit/web, builds client and server).</p></div>
+  <div class="step"><span class="sn">3</span><p style="margin:0"><b>devvit playtest r/yourTestSub</b> to run it live.</p></div>
+  <div class="step"><span class="sn">4</span><p style="margin:0">In the subreddit, use the mod menu item <b>"Create a Tamareddtchy nursery"</b>. That post is the playable game.</p></div>
+  <div class="footer"><span>11 . Run and ship</span><span>13</span></div>
+</section>
+
+<!-- CLOSING -->
+<section class="closing">
+  <h1>Leave your bubble.</h1>
+  <p>Raise something only the whole of Reddit could make.</p>
+  <div class="link">github.com/tdries/tamareddtchy</div>
+</section>
+
+</body>
+</html>
