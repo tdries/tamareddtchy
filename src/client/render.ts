@@ -8,7 +8,7 @@
 // in Node. The scene/animation lives in scene.ts.
 
 import * as THREE from "three";
-import { type Gene, type Genome, dominantGenes } from "../shared/genome.js";
+import { GENES, type Gene, type Genome, dominantGenes } from "../shared/genome.js";
 import { type Stage, stage } from "../shared/creature.js";
 import { type AnimalForm } from "./animals.js";
 
@@ -47,9 +47,31 @@ export interface CreatureColors {
   secondary: number;
 }
 
+// Color comes from the WHOLE gene distribution, not just the top gene. We blend
+// every gene's hue weighted by how much of the genome it represents, so a 40/30/30
+// creature is a genuine three-way mix and breeding two creatures yields a color
+// that is the real average of their distributions. The primary is the full-genome
+// blend; the secondary leans toward the single most dominant gene for accents.
 export function creatureColors(genome: Genome): CreatureColors {
-  const [a, b] = dominantGenes(genome);
-  return { primary: GENE_COLOR[a], secondary: GENE_COLOR[b ?? a] };
+  const total = GENES.reduce((s, g) => s + genome[g], 0) || 1;
+  // Weighted average of all gene hues in linear RGB (perceptually better blends).
+  const acc = new THREE.Color(0, 0, 0);
+  const tmp = new THREE.Color();
+  for (const g of GENES) {
+    const w = genome[g] / total;
+    if (w <= 0) continue;
+    tmp.set(GENE_COLOR[g]).convertSRGBToLinear();
+    acc.r += tmp.r * w;
+    acc.g += tmp.g * w;
+    acc.b += tmp.b * w;
+  }
+  acc.convertLinearToSRGB();
+  // A pure even mix turns muddy grey; pull the blend toward the single dominant
+  // hue a little so creatures stay vivid and identity stays readable.
+  const dom = new THREE.Color(GENE_COLOR[dominantGenes(genome)[0]]);
+  const primary = acc.clone().lerp(dom, 0.35);
+  const secondary = dom.clone().lerp(acc, 0.25);
+  return { primary: primary.getHex(), secondary: secondary.getHex() };
 }
 
 // A soft, organic blob: a smooth icosphere we dent with low-frequency, spatially
@@ -128,12 +150,13 @@ function furTexture(): THREE.Texture | null {
   cv.width = cv.height = n;
   const ctx = cv.getContext("2d")!;
   ctx.clearRect(0, 0, n, n);
-  // Scatter many tiny soft dots (strand cross-sections). Deterministic positions.
-  for (let i = 0; i < 2600; i++) {
+  // Dense scatter of fine strand cross-sections, deterministic. More, smaller,
+  // higher-contrast dots read as a thicker, finer coat.
+  for (let i = 0; i < 7000; i++) {
     const x = (Math.sin(i * 91.7) * 0.5 + 0.5) * n;
     const y = (Math.sin(i * 47.3 + 2.1) * 0.5 + 0.5) * n;
-    const r = 0.7 + (Math.sin(i * 12.9) * 0.5 + 0.5) * 1.1;
-    const a = 0.5 + (Math.sin(i * 5.5) * 0.5 + 0.5) * 0.5;
+    const r = 0.45 + (Math.sin(i * 12.9) * 0.5 + 0.5) * 0.8;
+    const a = 0.55 + (Math.sin(i * 5.5) * 0.5 + 0.5) * 0.45;
     ctx.beginPath();
     ctx.fillStyle = `rgba(255,255,255,${a})`;
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -141,7 +164,7 @@ function furTexture(): THREE.Texture | null {
   }
   const tex = new THREE.CanvasTexture(cv);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(8, 8);
+  tex.repeat.set(14, 14); // finer strands
   FUR_TEX = tex;
   return tex;
 }
@@ -151,7 +174,9 @@ function furTexture(): THREE.Texture | null {
 // taper to points. This is real shell-based fur, the soft fuzzy coat reads as
 // actual strands rather than a texture. Kept to a modest shell count so it stays
 // performant in the Devvit web view.
-const FUR_SHELLS = 10;
+const FUR_SHELLS = 14;
+const BODY_FUR_LEN = 0.16;
+const HEAD_FUR_LEN = 0.12;
 function addFur(mesh: THREE.Mesh, color: number, length = 0.12): void {
   const tex = furTexture();
   if (!tex) return; // no DOM (tests): skip fur
@@ -161,18 +186,21 @@ function addFur(mesh: THREE.Mesh, color: number, length = 0.12): void {
     const shell = new THREE.Mesh(
       mesh.geometry,
       new THREE.MeshStandardMaterial({
-        color: base.clone().multiplyScalar(0.7 + f * 0.3),
-        roughness: 0.95,
+        // Tips slightly lighter than roots, so the coat has depth.
+        color: base.clone().multiplyScalar(0.62 + f * 0.45),
+        roughness: 1.0,
         metalness: 0,
         alphaMap: tex,
         transparent: true,
-        alphaTest: 0.02 + f * 0.5, // outer shells keep only the densest strands
+        // Smoothly rising cutoff so strands taper to fine points at the tips.
+        alphaTest: 0.02 + f * f * 0.7,
         depthWrite: false,
       }),
     );
-    // Shell is a child of the mesh, so it already inherits the mesh's scale;
-    // inflate it slightly (uniformly in local space) to push strands outward.
+    // Inflate outward, and let the coat droop a touch under "gravity" as it goes
+    // out, which reads as hanging fur rather than a uniform balloon.
     shell.scale.setScalar(1 + f * length);
+    shell.position.y -= f * length * 0.35;
     shell.castShadow = false;
     mesh.add(shell);
   }
@@ -252,7 +280,7 @@ export function buildCreature(
   const body = blob(1, 5, colors.primary, chaos);
   // Animal proportions: elongate (horse/croc), heighten, and hump the back.
   body.scale.set(1, (1.05 - torsoLean * 0.12) * form.bodyTall, form.bodyLong);
-  addFur(body, colors.primary, 0.14);
+  addFur(body, colors.primary, BODY_FUR_LEN);
   if (form.hump > 0.2) {
     const hump = blob(0.55 * form.hump + 0.3, 4, colors.primary, 0.2);
     hump.position.set(0, 0.45, -0.2 * form.bodyLong);
@@ -280,7 +308,7 @@ export function buildCreature(
   const head = blob(headSize, 4, colors.primary, 0.12 + mutate * 0.3);
   head.scale.y = headLean > 0 ? 1.12 : 0.92; // domed vs sleek
   head.scale.z = 1 + form.headLong * 0.9; // snout/muzzle length
-  addFur(head, colors.primary, 0.1);
+  addFur(head, colors.primary, HEAD_FUR_LEN);
   headGroup.add(head);
 
   // Snout cap for long-muzzle animals (croc, horse, elephant), tinted darker.
@@ -321,42 +349,44 @@ export function buildCreature(
   // part of the head; the nose and mouth sit out at the snout tip.
   const eyeLean = lean(genome, "tech", "heart"); // + tech, - heart
   const warm = (1 - eyeLean) / 2; // 0 = full tech, 1 = full heart
-  const eyeR = 0.13 + warm * 0.11; // heart = big doe eyes
-  const headDepth = headSize * head.scale.z; // true half-depth of the head in z
+  const eyeR = 0.17 + warm * 0.1; // bigger, clearer eyes (heart = doe eyes)
+  // The head wears fur that inflates the visible surface; the face must sit
+  // OUTSIDE that coat or the fur buries it. This is the eyes bug: account for it.
+  const FUR_OUT = HEAD_FUR_LEN + 0.04; // clearance past the outermost fur shell
+  const headDepth = headSize * head.scale.z * (1 + FUR_OUT); // furred front in z
   const snoutTipZ = headDepth + headSize * form.headLong * 0.5;
-  // Eyes sit proud on the upper-front of the head dome. Use the stretched depth
-  // so they land on the visible surface, not buried inside an elongated head.
-  const eyeZ = headDepth * 0.72;
-  const eyeY = 0.16 + form.headLong * 0.12; // higher on long-muzzle faces
+  // Eyes sit proud on the upper-front of the furred head dome.
+  const eyeZ = headDepth * 0.74;
+  const eyeY = (0.18 + form.headLong * 0.12) * headSize * 2; // scale with head
   const eyes: THREE.Mesh[] = [];
-  for (const dx of [-0.26, 0.26]) {
+  for (const dx of [-0.3, 0.3]) {
+    // A whole eyeball that sits ON the fur, in a slight socket, big and round.
     const white = new THREE.Mesh(
-      new THREE.SphereGeometry(eyeR, 20, 20),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.12, metalness: 0 }),
+      new THREE.SphereGeometry(eyeR, 22, 22),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0, envMapIntensity: 0.4 }),
     );
-    white.position.set(dx, eyeY, eyeZ);
+    white.position.set(dx * headSize * 1.5, eyeY, eyeZ);
     const pupil = new THREE.Mesh(
-      new THREE.SphereGeometry(eyeR * 0.55, 14, 14),
-      new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.2 }),
+      new THREE.SphereGeometry(eyeR * 0.52, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.15 }),
     );
-    pupil.position.set(dx, eyeY, eyeZ + eyeR * 0.62);
+    pupil.position.set(dx * headSize * 1.5, eyeY, eyeZ + eyeR * 0.62);
     const glint = new THREE.Mesh(
-      new THREE.SphereGeometry(eyeR * 0.18, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x888888 }),
+      new THREE.SphereGeometry(eyeR * 0.16, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xaaaaaa }),
     );
-    glint.position.set(dx + eyeR * 0.2, eyeY + eyeR * 0.25, eyeZ + eyeR * 0.7);
+    glint.position.set(dx * headSize * 1.5 + eyeR * 0.25, eyeY + eyeR * 0.3, eyeZ + eyeR * 0.72);
     headGroup.add(white, pupil, glint);
     eyes.push(white);
   }
 
-  // Nose: ALWAYS a visible button, out at the snout tip (or face front for round
-  // heads). Warm (heart) makes it bigger and rounder.
-  const noseR = 0.08 + warm * 0.05;
+  // Nose: ALWAYS a visible button, out at the snout tip past the fur.
+  const noseR = 0.1 + warm * 0.05;
   const nose = new THREE.Mesh(
-    new THREE.SphereGeometry(noseR, 14, 14),
+    new THREE.SphereGeometry(noseR, 16, 16),
     skinMaterial(shade(colors.secondary, 0.8)),
   );
-  const noseY = -0.05 - form.headLong * 0.08;
+  const noseY = (-0.06 - form.headLong * 0.08) * headSize * 2;
   nose.position.set(0, noseY, snoutTipZ);
   nose.scale.z = 1.2;
   headGroup.add(nose);
