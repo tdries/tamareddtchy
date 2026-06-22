@@ -41,6 +41,18 @@ Reddit games that spike on day one and die on day three all share one flaw: noth
 - **User contributions:** the entire artifact is user generated. Every hatch, evolution, and birth renders an image and posts itself to the subreddit.
 - **Reddit-y:** the game mechanic is upvoting, commenting, and cross community rivalry. Install it in two rival subs and their creatures carry opposite house genes, so the best offspring come from cross subreddit mating.
 
+## Every creature is a furry, procedural animal
+
+Creatures are grown in 3D from the genome, no model files. Each is born as one of twenty animal forms (dog, cat, horse, fox, bear, and so on), wears a real shell-based fur coat, and is colored by its two dominant genes. Breeding blends both the genomes and the animal forms, so a bloodline visibly mixes color and shape as it climbs the generations. Here is one bloodline from generation 1 to 10, each step a cross with a new partner:
+
+<p align="center">
+  <img src="docs/generations/gen-01.png" width="15%" />
+  <img src="docs/generations/gen-03.png" width="15%" />
+  <img src="docs/generations/gen-05.png" width="15%" />
+  <img src="docs/generations/gen-07.png" width="15%" />
+  <img src="docs/generations/gen-10.png" width="15%" />
+</p>
+
 ## Screenshots
 
 ### Hatch: tell it who you are

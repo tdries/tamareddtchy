@@ -1,19 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { buildCreature, creatureColors } from "./render.js";
 import { emptyGenome } from "../shared/genome.js";
+import { ANIMALS } from "./animals.js";
 
 function g(parts: Record<string, number>) {
   return { ...emptyGenome(), ...parts };
 }
 
 describe("buildCreature", () => {
-  it("produces all six body slots", () => {
+  it("produces every body slot", () => {
     const { parts } = buildCreature(g({ knowledge: 100, vitality: 80 }), 1, 500);
     expect(parts.body).toBeDefined();
     expect(parts.head).toBeDefined();
     expect(parts.eyes.length).toBe(2);
-    expect(parts.arms.children.length).toBeGreaterThan(0);
-    expect(parts.legs.children.length).toBeGreaterThan(0);
+    expect(parts.mouth).toBeDefined();
+    expect(parts.arms.children.length).toBeGreaterThan(0); // articulated arms
+    expect(parts.legs.children.length).toBeGreaterThan(0); // articulated legs
   });
 
   it("is deterministic for the same inputs", () => {
@@ -24,11 +26,12 @@ describe("buildCreature", () => {
     expect(a.colors).toEqual(b.colors);
   });
 
-  it("picks a single rooted base when Inner dominates, many legs when Social does", () => {
-    const inner = buildCreature(g({ inner: 200 }), 1, 500);
-    const social = buildCreature(g({ social: 200 }), 1, 500);
-    expect(inner.parts.legs.children.length).toBe(1);
-    expect(social.parts.legs.children.length).toBeGreaterThan(1);
+  it("quadruped animals stand on four legs, bipeds on two", () => {
+    const genome = g({ knowledge: 100, vitality: 80 });
+    const horse = ANIMALS.find((a) => a.name === "Horse")!;
+    const monkey = ANIMALS.find((a) => a.name === "Monkey")!;
+    expect(buildCreature(genome, 1, 500, horse).parts.legs.children.length).toBe(4);
+    expect(buildCreature(genome, 1, 500, monkey).parts.legs.children.length).toBe(2);
   });
 
   it("colors come from the two dominant genes", () => {

@@ -7,8 +7,10 @@ import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { buildCreature, type BuildResult } from "./render.js";
 import type { Genome } from "../shared/genome.js";
+import type { AnimalForm } from "./animals.js";
 
 export type Mood = "happy" | "ok" | "sad";
 
@@ -36,32 +38,42 @@ export class CreatureScene {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     // Filmic tone mapping makes the emissive glow read as light, not flat color.
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 0.95;
     this.resize();
     host.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(42, this.aspect(), 0.1, 100);
-    this.camera.position.set(0, 0.3, 4.4);
 
-    // Soft, warm-cool key/fill/rim plus a hemisphere for gentle ambient bounce.
-    const key = new THREE.DirectionalLight(0xffffff, 2.0);
+    // Image-based lighting: generate a soft studio environment from a room scene
+    // (no external HDR file, works offline). This gives the skin real reflections
+    // and ambient bounce, the single biggest realism win, at near-zero runtime
+    // cost since it is baked once into a cube map.
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const envScene = new RoomEnvironment();
+    this.scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+    this.scene.environmentIntensity = 0.4;
+    pmrem.dispose();
+
+    this.camera = new THREE.PerspectiveCamera(42, this.aspect(), 0.1, 100);
+    // Pulled back and aimed slightly up so the whole creature, including taller
+    // animal forms (necks, big bodies, spread legs), stays framed with the face
+    // clearly in view.
+    this.camera.position.set(0, 0.85, 6.4);
+    this.camera.lookAt(0, 0.35, 0);
+
+    // The env map now does most of the lighting; the key light is mainly for the
+    // shadow and a little shape definition, so keep the direct lights modest to
+    // avoid blowing the creature out.
+    const key = new THREE.DirectionalLight(0xffffff, 1.1);
     key.position.set(3, 5, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
     key.shadow.camera.near = 0.5;
     key.shadow.camera.far = 20;
     key.shadow.bias = -0.0008;
-    const fill = new THREE.DirectionalLight(0xbcd4ff, 0.6);
-    fill.position.set(-4, 1, 2);
-    const rim = new THREE.DirectionalLight(0xffd9a8, 0.7);
+    const rim = new THREE.DirectionalLight(0xffd9a8, 0.35);
     rim.position.set(0, 3, -4);
-    this.scene.add(
-      key,
-      fill,
-      rim,
-      new THREE.HemisphereLight(0xcfe0ff, 0x3a2a55, 0.7),
-    );
+    this.scene.add(key, rim);
 
     // A soft contact-shadow floor so the creature feels grounded in the dish.
     const floor = new THREE.Mesh(
@@ -78,7 +90,9 @@ export class CreatureScene {
     // Soft bloom so the aura, orb, and emissive skin glow.
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.55, 0.7);
+    // Gentle bloom: strength low and threshold high so only genuine highlights
+    // glow, not the whole body.
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.28, 0.5, 0.85);
     this.composer.addPass(this.bloom);
 
     this.bindDrag();
@@ -113,10 +127,11 @@ export class CreatureScene {
     window.addEventListener("pointerup", up);
   }
 
-  // Swap in a new creature. Cheap enough to call on every genome change.
-  setCreature(genome: Genome, generation: number, xp: number) {
+  // Swap in a new creature. Cheap enough to call on every genome change. An
+  // optional animal form drives the silhouette; omit it for the neutral shape.
+  setCreature(genome: Genome, generation: number, xp: number, form?: AnimalForm) {
     this.rig.clear();
-    this.built = buildCreature(genome, generation, xp);
+    this.built = buildCreature(genome, generation, xp, form);
     // Every solid mesh casts and receives soft shadows.
     this.built.group.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -171,22 +186,34 @@ export class CreatureScene {
         e.rotation.y = sacc;
       }
 
-      // Mouth: opens and closes once in a while, like it is chirping or chewing.
-      const talk = pulse(t, 5.0, 0.12) ? 1 + Math.abs(Math.sin(t * 14)) * 0.9 : 1;
-      mouth.scale.y = this.mouthBaseY * talk;
+      // Mouth: opens and closes once in a while (chirp/chew). Scale uniformly so
+      // the rotated smile arc does not distort.
+      const talk = pulse(t, 5.0, 0.12) ? 1 + Math.abs(Math.sin(t * 14)) * 0.7 : 1;
+      mouth.scale.setScalar(this.mouthBaseY * talk);
 
-      // Arms: a slow idle sway, with an occasional bigger wave.
-      const wave = pulse(t, 7.0, 0.1) ? Math.sin(t * 9) * 0.4 : 0;
-      arms.children.forEach((arm, i) => {
-        const side = i % 2 === 0 ? -1 : 1;
-        arm.rotation.x = Math.sin(t * 1.1 + i) * 0.12 + wave * side;
+      // Arms: now articulated. Swing the shoulder and flex the elbow, with an
+      // occasional bigger wave. Bigger, looser motion than before.
+      const wave = pulse(t, 7.0, 0.14) ? Math.sin(t * 8) * 0.7 : 0;
+      arms.children.forEach((shoulder) => {
+        const { side, elbow } = shoulder.userData as { side: number; elbow: THREE.Object3D };
+        const sway = Math.sin(t * 1.2 + side) * 0.18;
+        shoulder.rotation.x = sway + wave * side;
+        if (elbow) elbow.rotation.x = 0.3 + Math.sin(t * 1.6 + side) * 0.25 + Math.abs(wave) * 0.6;
       });
 
-      // Legs: a small periodic shuffle/tap once in a while.
-      const step = pulse(t, 6.0, 0.12);
-      legs.children.forEach((leg, i) => {
-        if (leg.userData.baseY === undefined) leg.userData.baseY = leg.position.y;
-        leg.position.y = leg.userData.baseY + (step ? Math.max(0, Math.sin(t * 12 + i * 1.7)) * 0.06 : 0);
+      // Legs: articulated hip + knee. A gentle idle shift, an occasional step.
+      const step = pulse(t, 6.0, 0.16);
+      legs.children.forEach((hip) => {
+        const { knee, i } = hip.userData as { knee: THREE.Object3D; i: number };
+        const phase = t * 9 + i * 1.7;
+        const lift = step ? Math.max(0, Math.sin(phase)) : 0;
+        hip.rotation.x = Math.sin(t * 1.0 + i) * 0.06 + lift * 0.35;
+        if (knee) knee.rotation.x = 0.15 + lift * 0.5;
+      });
+
+      // Tail: a lazy side-to-side wag through the segmented chain.
+      this.built.parts.tail.children.forEach((seg) => {
+        wagTail(seg as THREE.Object3D, t, 0);
       });
     }
     this.composer.render();
@@ -214,4 +241,13 @@ function blinkAmount(t: number): number {
   const a = t % 4.3 < 0.12;
   const b = t % 6.7 < 0.1;
   return a || b ? 0.12 : 1;
+}
+
+// Wag a segmented tail. Each segment is parented to the previous, so a small
+// rotation per segment compounds into a smooth whip. `depth` increases as we
+// recurse so later segments lag, giving the wave a natural follow-through.
+function wagTail(seg: THREE.Object3D, t: number, depth: number): void {
+  if (seg.userData.tailSeg === undefined) return;
+  seg.rotation.y = Math.sin(t * 2.2 - depth * 0.6) * 0.22;
+  for (const child of seg.children) wagTail(child, t, depth + 1);
 }

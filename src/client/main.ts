@@ -17,6 +17,7 @@ import {
 } from "../shared/genome.js";
 import { type FeedKind, stage } from "../shared/creature.js";
 import * as mating from "../shared/mating.js";
+import { formForCreature, blendForms } from "./animals.js";
 import * as api from "./api.js";
 
 const view = document.getElementById("view")!;
@@ -171,7 +172,7 @@ function renderNursery() {
     </section>`;
 
   nurseryScene = new CreatureScene(document.getElementById("dish")!);
-  nurseryScene.setCreature(c.genome, c.generation, c.xp);
+  nurseryScene.setCreature(c.genome, c.generation, c.xp, formForCreature(c.id, c.parents));
   nurseryScene.setMood(mood);
 
   view.querySelectorAll<HTMLElement>(".feed-btn").forEach((btn) => {
@@ -264,7 +265,7 @@ async function renderMate() {
     grid.appendChild(el);
     const viz = el.querySelector(".viz") as HTMLElement;
     const s = new CreatureScene(viz);
-    s.setCreature(card.creature.genome, card.creature.generation, card.creature.xp);
+    s.setCreature(card.creature.genome, card.creature.generation, card.creature.xp, formForCreature(card.creature.id, card.creature.parents));
     miniScenes.push(s);
     el.querySelector("button")!.addEventListener("click", async () => {
       await api.requestMate(c.id, card.creature.id, "me", "you keep the kid");
@@ -370,17 +371,20 @@ async function renderRequests() {
     if (!rv.myCreature || !rv.partnerCreature) return;
     const childGenome = blend(rv.myCreature.genome, rv.partnerCreature.genome);
     const childGen = Math.max(rv.myCreature.generation, rv.partnerCreature.generation) + 1;
-    const mount = (sel: string, genome: typeof childGenome, gen: number, xp: number) => {
+    const myForm = formForCreature(rv.myCreature.id, rv.myCreature.parents);
+    const partnerForm = formForCreature(rv.partnerCreature.id, rv.partnerCreature.parents);
+    const childForm = blendForms(myForm, partnerForm, 0.5); // hybrid silhouette
+    const mount = (sel: string, genome: typeof childGenome, gen: number, xp: number, form: import("./animals.js").AnimalForm) => {
       const el = trioEl.querySelector<HTMLElement>(`.trio-viz[data-which="${sel}"]`);
       if (!el) return;
       const s = new CreatureScene(el);
-      s.setCreature(genome, gen, xp);
+      s.setCreature(genome, gen, xp, form);
       trioScenes.push(s);
     };
-    mount("mine", rv.myCreature.genome, rv.myCreature.generation, rv.myCreature.xp);
-    mount("partner", rv.partnerCreature.genome, rv.partnerCreature.generation, rv.partnerCreature.xp);
-    // Preview the child as a small egg/blob so it reads as "incubating", not grown.
-    mount("child", childGenome, childGen, 60);
+    mount("mine", rv.myCreature.genome, rv.myCreature.generation, rv.myCreature.xp, myForm);
+    mount("partner", rv.partnerCreature.genome, rv.partnerCreature.generation, rv.partnerCreature.xp, partnerForm);
+    // Preview the child: blended genome AND blended animal form, the real hybrid.
+    mount("child", childGenome, childGen, 60, childForm);
   });
 
   // Keep refreshing while anything is pending or incubating.
