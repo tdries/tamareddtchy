@@ -7,7 +7,6 @@ import {
   blend,
   complement,
   complementarity,
-  dominantGenes,
 } from "./genome.js";
 import {
   hatch,
