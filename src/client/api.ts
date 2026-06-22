@@ -3,12 +3,7 @@
 // in-memory mock seeded with a few rival creatures so every screen has content.
 // Same shapes either way, so the UI never knows the difference.
 
-import {
-  type Gene,
-  type Genome,
-  complementarity,
-  dominantGenes,
-} from "../shared/genome.js";
+import { type Gene, type Genome, dominantGenes } from "../shared/genome.js";
 import {
   type Creature,
   type FeedKind,
@@ -20,11 +15,30 @@ import {
   canMate,
   lineageScore,
 } from "../shared/creature.js";
+import {
+  type MateRequest,
+  propose,
+  accept,
+  resolve as resolveReq,
+  successChance,
+  isReady,
+} from "../shared/mating.js";
 
 export interface MateCard {
   creature: Creature;
   ownerName: string;
   seeking: Gene; // the complement it wants
+  successChance: number; // 0..1 odds a mating with this partner takes
+}
+
+export type { MateRequest };
+
+// A request joined with the names/creatures the UI needs to render it.
+export interface RequestView {
+  req: MateRequest;
+  partnerName: string;
+  partnerCreature: Creature | null;
+  offspring: Creature | null; // populated once hatched, if it is mine
 }
 
 const ON_DEVVIT = typeof window !== "undefined" && /devvit|reddit/.test(window.location.hostname);
@@ -57,6 +71,8 @@ function seedRivals(): Creature[] {
 const mock = {
   creatures: new Map<string, Creature>(),
   mine: [] as string[],
+  requests: [] as MateRequest[],
+  offspringByReq: new Map<string, Creature>(),
   seeded: false,
 };
 
@@ -159,37 +175,108 @@ export async function feed(creatureId: string, gene: Gene, kind: FeedKind): Prom
 export async function mateMarket(myGenome: Creature): Promise<MateCard[]> {
   if (ON_DEVVIT) return post<MateCard[]>("/api/mate/market", { creatureId: myGenome.id });
   ensureSeed();
-  // Rank rivals by how complementary they are to me, best first.
+  // Rank rivals by how complementary they are to me, best first. Each card
+  // carries the real success chance so the player can weigh the odds.
   const rivals = [...mock.creatures.values()].filter((c) => c.ownerId !== ME);
   return rivals
     .map((c) => ({
       creature: c,
       ownerName: c.name,
       seeking: dominant(c.genome),
-      score: complementarity(myGenome.genome, c.genome),
+      successChance: successChance(myGenome.genome, c.genome),
     }))
-    .sort((a, b) => b.score - a.score)
-    .map(({ creature, ownerName, seeking }) => ({ creature, ownerName, seeking }));
+    .sort((a, b) => b.successChance - a.successChance);
 }
 
-export async function proposeMate(
+// Propose a mate. Creates a PENDING request you can follow up on. It does not
+// resolve here: the partner must accept, then it gestates for real time.
+export async function requestMate(
   myId: string,
   partnerId: string,
   owner: "me" | "partner",
-  childName: string,
-): Promise<Creature> {
-  if (ON_DEVVIT) return post<Creature>("/api/mate/propose", { myId, partnerId, owner, childName });
-  // In the mock the partner always accepts (it is a demo) and the deal resolves.
-  const a = mock.creatures.get(myId)!;
+  tradeNote: string,
+): Promise<MateRequest> {
+  if (ON_DEVVIT) return post<MateRequest>("/api/mate/propose", { myId, partnerId, owner, tradeNote });
   const b = mock.creatures.get(partnerId)!;
   const ownerId = owner === "me" ? ME : b.ownerId;
-  const { offspring, parentA } = matePure(a, b, ownerId, `mine_${mock.mine.length + 1}`, childName, now());
-  mock.creatures.set(parentA.id, parentA);
-  if (ownerId === ME) {
-    mock.creatures.set(offspring.id, offspring);
-    mock.mine.push(offspring.id);
+  const req = propose(
+    `req_${mock.requests.length + 1}`,
+    ME, myId, b.ownerId, partnerId, ownerId, tradeNote, now(),
+  );
+  mock.requests.push(req);
+  return req;
+}
+
+// Bring requests up to date: simulated partners accept shortly after asking, and
+// any incubation whose timer has elapsed resolves (probabilistic). On Devvit
+// this is the server's job; here we advance the mock world lazily on each read.
+function advanceRequests() {
+  const t = now();
+  for (let i = 0; i < mock.requests.length; i++) {
+    let r = mock.requests[i];
+    // Simulated partner accepts ~3s after the proposal (a real user would click).
+    if (r.status === "pending" && t - r.createdAt > 3000) {
+      const a = mock.creatures.get(r.fromCreatureId)!;
+      const b = mock.creatures.get(r.toCreatureId)!;
+      r = accept(r, a.genome, b.genome, t);
+    }
+    // Resolve once gestation completes. Roll comes from a deterministic-ish hash
+    // of the request id so a given request has a stable outcome across reads.
+    if (isReady(r, t)) {
+      const roll = hashRoll(r.id);
+      const { req: done, success } = resolveReq(r, roll, t);
+      r = done;
+      if (success) {
+        const a = mock.creatures.get(r.fromCreatureId)!;
+        const b = mock.creatures.get(r.toCreatureId)!;
+        const { offspring, parentA, parentB } = matePure(
+          a, b, r.ownerOnSuccess, `mine_${mock.mine.length + 1}`, `${a.name} Jr`, t,
+        );
+        mock.creatures.set(parentA.id, parentA);
+        mock.creatures.set(parentB.id, parentB);
+        if (r.ownerOnSuccess === ME) {
+          mock.creatures.set(offspring.id, offspring);
+          mock.mine.push(offspring.id);
+          mock.offspringByReq.set(r.id, offspring);
+        }
+      } else {
+        // Failure still burns the parents' cooldown + hunger (no offspring).
+        const a = mock.creatures.get(r.fromCreatureId)!;
+        const b = mock.creatures.get(r.toCreatureId)!;
+        const spent = matePure(a, b, "void", "discard", "x", t);
+        mock.creatures.set(spent.parentA.id, spent.parentA);
+        mock.creatures.set(spent.parentB.id, spent.parentB);
+      }
+    }
+    mock.requests[i] = r;
   }
-  return offspring;
+}
+
+// Stable 0..1 from a string (no Math.random: a request resolves the same way
+// every time it is polled).
+function hashRoll(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+export async function myRequests(): Promise<RequestView[]> {
+  if (ON_DEVVIT) return post<RequestView[]>("/api/mate/requests", {});
+  ensureSeed();
+  advanceRequests();
+  return mock.requests
+    .filter((r) => r.fromUserId === ME)
+    .slice()
+    .reverse()
+    .map((r) => {
+      const partner = mock.creatures.get(r.toCreatureId) ?? null;
+      return {
+        req: r,
+        partnerName: partner?.name ?? "someone",
+        partnerCreature: partner,
+        offspring: mock.offspringByReq.get(r.id) ?? null,
+      };
+    });
 }
 
 export async function leaderboard(): Promise<{ name: string; score: number }[]> {

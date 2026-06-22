@@ -15,6 +15,7 @@ import {
   type Gene,
 } from "../shared/genome.js";
 import { type FeedKind, stage } from "../shared/creature.js";
+import * as mating from "../shared/mating.js";
 import * as api from "./api.js";
 
 const view = document.getElementById("view")!;
@@ -24,19 +25,23 @@ const GENE_HUE = (g: Gene) => `var(--g-${g})`;
 let state: api.State;
 let nurseryScene: CreatureScene | null = null;
 const miniScenes: CreatureScene[] = [];
+let requestPoll: number | null = null;
 
-type Tab = "nursery" | "genome" | "mate" | "board";
+type Tab = "nursery" | "mate" | "board";
 
 function currentTab(): Tab {
   const url = new URL(window.location.href);
-  const t = (url.searchParams.get("tab") as Tab) || "nursery";
-  return (["nursery", "genome", "mate", "board"] as Tab[]).includes(t) ? t : "nursery";
+  let t = url.searchParams.get("tab") as Tab;
+  // Genome merged into the nursery; keep old ?tab=genome links working.
+  if ((t as string) === "genome") t = "nursery";
+  return (["nursery", "mate", "board"] as Tab[]).includes(t) ? t : "nursery";
 }
 
 function disposeScenes() {
   nurseryScene?.dispose();
   nurseryScene = null;
   while (miniScenes.length) miniScenes.pop()!.dispose();
+  if (requestPoll) { clearTimeout(requestPoll); requestPoll = null; }
 }
 
 function toast(msg: string) {
@@ -64,7 +69,6 @@ async function render() {
     b.classList.toggle("active", (b as HTMLElement).dataset.tab === tab);
   }
   if (tab === "nursery") return renderNursery();
-  if (tab === "genome") return renderGenome();
   if (tab === "mate") return renderMate();
   if (tab === "board") return renderBoard();
 }
@@ -154,6 +158,7 @@ function renderNursery() {
           </div>
         </div>
       </div>
+      ${genomeCardHTML(c)}
     </section>`;
 
   nurseryScene = new CreatureScene(document.getElementById("dish")!);
@@ -183,27 +188,25 @@ function renderNursery() {
   });
 }
 
-// ---------------------------------- genome ---------------------------------
-function renderGenome() {
-  const c = state.active!;
+// ---------------------------------- genome card ----------------------------
+// Now embedded inside the nursery (no separate tab). Returns markup so the
+// nursery can append it below the live creature.
+function genomeCardHTML(c: import("../shared/creature.js").Creature): string {
   const score = scoreGenetics(c.genome);
   const balances = pairBalance(c.genome);
-
-  view.innerHTML = `
-    <section class="screen">
-      <p class="eyebrow">Genome card</p>
-      <h1 class="title">${c.name}'s build</h1>
-      <p class="sub">Good genetics means both sides of many pairs are developed. That only comes from crossing distant gene pools.</p>
-      <div style="display:flex;gap:26px;align-items:center;margin-bottom:22px;flex-wrap:wrap">
-        <div class="score-big">${score}<small>/100 genetics</small></div>
-        <div class="chips">
-          ${dominantGenes(c.genome).slice(0, 4).map((g) => `<span class="chip"><span class="dot" style="background:${GENE_HUE(g)}"></span>${GENE_INFO[g].label}<span class="val">${c.genome[g]}</span></span>`).join("")}
+  return `
+    <div class="genome-card">
+      <div class="genome-head">
+        <div>
+          <p class="eyebrow">Genome card</p>
+          <h2 class="section-h" style="margin:2px 0 0">${c.name}'s build, shareable</h2>
         </div>
+        <div class="score-big">${score}<small>/100</small></div>
       </div>
+      <p class="sub" style="margin:6px 0 14px">Good genetics means both sides of many pairs are developed. That only comes from crossing distant gene pools.</p>
       <div class="pairs">
         ${PAIRS.map(([a, b], i) => {
-          const bal = balances[i]; // + favors a
-          const aPct = bal >= 0 ? 50 + bal * 50 : 50 + bal * 50;
+          const aPct = 50 + balances[i] * 50;
           return `
           <div class="pair">
             <div class="pair-head"><span style="color:${GENE_HUE(a)}">${GENE_INFO[a].label} ${c.genome[a]}</span><span style="color:${GENE_HUE(b)}">${c.genome[b]} ${GENE_INFO[b].label}</span></div>
@@ -214,7 +217,7 @@ function renderGenome() {
           </div>`;
         }).join("")}
       </div>
-    </section>`;
+    </div>`;
 }
 
 // --------------------------------- mate market -----------------------------
@@ -224,24 +227,28 @@ async function renderMate() {
     <section class="screen">
       <p class="eyebrow">Mate market</p>
       <h1 class="title">Find your opposite</h1>
-      <p class="sub">Ranked by how complementary they are to ${c.name}. Opposites make strong offspring; twins make a busted, inbred mess. The offspring is one creature, and you negotiate who keeps it.</p>
+      <p class="sub">The closer to a perfect opposite gene pool, the higher the odds a mating takes. A poor match can still work, it just becomes a numbers game. Mating costs a cooldown whether it succeeds or not.</p>
+      <div id="requests"></div>
+      <h2 class="section-h">Candidates</h2>
       <div class="mate-grid" id="mates"></div>
     </section>`;
 
+  renderRequests();
+
   const cards = await api.mateMarket(c);
   const grid = view.querySelector("#mates")!;
-  cards.forEach((card, idx) => {
-    // First cards are the most complementary (api ranks them); fade the fit down.
-    const fit = Math.max(0.12, 0.92 - idx * 0.18);
-    const fitPct = Math.round(fit * 100);
-    const good = idx < 2;
+  cards.forEach((card) => {
+    const pct = Math.round(card.successChance * 100);
+    const tier = pct >= 60 ? "fit-high" : pct >= 30 ? "fit-mid" : "fit-low";
+    const word = pct >= 60 ? "strong" : pct >= 30 ? "risky" : "long shot";
     const el = document.createElement("div");
     el.className = "mate-card";
     el.innerHTML = `
       <div class="viz"></div>
       <div class="body">
         <div class="who">${card.ownerName} <span style="color:var(--ink-3);font-size:13px">Gen-${card.creature.generation}</span></div>
-        <div class="match-meter ${good ? "" : "fit-low"}">match for you: <b>${good ? "strong" : "weak"}</b> (${fitPct}%)</div>
+        <div class="odds ${tier}"><span class="odds-bar"><span style="width:${pct}%"></span></span><span class="odds-num">${pct}%</span></div>
+        <div class="match-meter ${tier}">success chance: <b>${word}</b></div>
         <div class="chips">${dominantGenes(card.creature.genome).slice(0, 3).map((g) => `<span class="chip"><span class="dot" style="background:${GENE_HUE(g)}"></span>${GENE_INFO[g].label}</span>`).join("")}</div>
         <button class="btn" data-id="${card.creature.id}">Propose (you keep the kid)</button>
       </div>`;
@@ -251,11 +258,56 @@ async function renderMate() {
     s.setCreature(card.creature.genome, card.creature.generation, card.creature.xp);
     miniScenes.push(s);
     el.querySelector("button")!.addEventListener("click", async () => {
-      const kid = await api.proposeMate(c.id, card.creature.id, "me", `${c.name} Jr`);
-      const q = scoreGenetics(kid.genome);
-      toast(q >= 45 ? `Healthy Gen-${kid.generation}! genetics ${q}` : `Oof. inbred Gen-${kid.generation}, genetics ${q}`);
+      await api.requestMate(c.id, card.creature.id, "me", "you keep the kid");
+      toast(`Proposed to ${card.ownerName}. Track it under your matings.`);
+      renderRequests();
     });
   });
+}
+
+// The follow-up panel: every mate request you have sent, with live status and a
+// gestation progress bar. Polls itself while anything is in flight.
+async function renderRequests() {
+  const host = view.querySelector("#requests");
+  if (!host) return;
+  const reqs = await api.myRequests();
+  const now = Date.now();
+
+  if (reqs.length === 0) {
+    host.innerHTML = "";
+    if (requestPoll) { clearTimeout(requestPoll); requestPoll = null; }
+    return;
+  }
+
+  host.innerHTML = `
+    <h2 class="section-h">Your matings</h2>
+    <div class="req-list">
+      ${reqs.map((rv) => {
+        const r = rv.req;
+        const prog = Math.round(mating.gestationProgress(r, now) * 100);
+        const chance = Math.round(r.successChance * 100);
+        let badge = "", detail = "", cls = "";
+        if (r.status === "pending") { badge = "waiting for accept"; detail = `${rv.partnerName} has not answered yet`; cls = "st-pending"; }
+        else if (r.status === "incubating") { badge = "incubating"; detail = `${prog}% . ${chance}% chance it takes`; cls = "st-inc"; }
+        else if (r.status === "hatched") { badge = "hatched!"; detail = rv.offspring ? `Gen-${rv.offspring.generation} ${rv.offspring.name}, genetics ${scoreGenetics(rv.offspring.genome)}` : "a new creature was born"; cls = "st-ok"; }
+        else if (r.status === "failed") { badge = "failed"; detail = "no offspring, cooldown spent. try again"; cls = "st-fail"; }
+        else { badge = "declined"; detail = `${rv.partnerName} said no`; cls = "st-fail"; }
+        return `
+          <div class="req-row ${cls}">
+            <div class="req-main">
+              <span class="req-partner">${rv.partnerName}</span>
+              <span class="req-badge">${badge}</span>
+            </div>
+            <div class="req-detail">${detail}</div>
+            ${r.status === "incubating" ? `<div class="bar inc"><span style="width:${prog}%"></span></div>` : ""}
+          </div>`;
+      }).join("")}
+    </div>`;
+
+  // Keep refreshing while anything is pending or incubating.
+  const live = reqs.some((rv) => rv.req.status === "pending" || rv.req.status === "incubating");
+  if (requestPoll) { clearTimeout(requestPoll); requestPoll = null; }
+  if (live) requestPoll = window.setTimeout(renderRequests, 1500);
 }
 
 // --------------------------------- lineage board ---------------------------

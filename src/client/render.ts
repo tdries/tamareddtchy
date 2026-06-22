@@ -102,6 +102,7 @@ export interface BuildResult {
     body: THREE.Mesh;
     head: THREE.Group;
     eyes: THREE.Mesh[];
+    mouth: THREE.Mesh;
     arms: THREE.Group;
     legs: THREE.Group;
     accessory: THREE.Group;
@@ -279,7 +280,7 @@ export function buildCreature(
   group.scale.setScalar(s);
   return {
     group,
-    parts: { body, head: headGroup, eyes, arms: armGroup, legs: legGroup, accessory: accGroup },
+    parts: { body, head: headGroup, eyes, mouth, arms: armGroup, legs: legGroup, accessory: accGroup },
     colors,
   };
 }

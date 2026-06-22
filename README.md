@@ -57,13 +57,13 @@ Your creature breathes, blinks, bobs, and droops when neglected. Drag to spin it
 
 ### Genome card: your build, shareable
 
-The "what's your build" card. A single genetics score out of 100 and the six opposite pairs laid out as tug of war bars. Good genetics means both sides of many pairs are developed, which you can only reach by crossing gene pools.
+Below the live creature in the nursery sits the "what's your build" card: a single genetics score out of 100 and the six opposite pairs laid out as tug of war bars. Good genetics means both sides of many pairs are developed, which you can only reach by crossing gene pools.
 
 ![Genome card](docs/screenshots/02-genome.png)
 
 ### Mate market: find your opposite
 
-Every other creature in the subreddit, ranked by how complementary it is to yours and each one rendered live in 3D from its own genome. Strong matches make healthy children. Mating is a deal: you propose who keeps the single offspring and what you trade for it.
+Every other creature in the subreddit, ranked by how complementary it is to yours and each one rendered live in 3D from its own genome. Each candidate shows a real success chance: the closer to a perfect opposite gene pool, the higher the odds the mating takes. A poor match can still work, it just becomes a numbers game. Mating is a deal (you propose who keeps the single offspring), it is not instant (the partner accepts, then it gestates for real time), and it can fail. A "Your matings" panel tracks every request through pending, incubating, and hatched or failed.
 
 ![Mate market](docs/screenshots/03-mate.png)
 
@@ -78,6 +78,7 @@ The leaderboard ranks players by lineage score, which blends generation depth, g
 | Component | Role | Where it lives |
 |---|---|---|
 | Genome model | The 12 genes, 6 opposite pairs, genetics scoring, breeding, lineage score | [src/shared/genome.ts](src/shared/genome.ts), [src/shared/creature.ts](src/shared/creature.ts) |
+| Mating lifecycle | Proposal status, real gestation timer, complementarity-driven success odds | [src/shared/mating.ts](src/shared/mating.ts) |
 | Procedural 3D render | Grows the creature geometry from the genome, no model files | [src/client/render.ts](src/client/render.ts) |
 | Living scene | Three.js scene, lights, turntable, idle animation, mood reactions | [src/client/scene.ts](src/client/scene.ts) |
 | Client UI | Four screens plus onboarding, the distinctive incubator-toy design | [src/client/main.ts](src/client/main.ts), [src/client/style.css](src/client/style.css) |

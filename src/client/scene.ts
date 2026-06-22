@@ -21,8 +21,8 @@ export class CreatureScene {
   private t = 0;
   private dragging = false;
   private lastX = 0;
-  private spin = 0; // user-applied spin offset
-  private autoRotate = true;
+  private spin = 0; // user-applied spin offset (drag only; no auto-rotate)
+  private mouthBaseY = 0;
   private mood: Mood = "happy";
   private bounce = 0; // decays; spikes when fed
   private raf = 0;
@@ -104,9 +104,10 @@ export class CreatureScene {
 
   private bindDrag() {
     const el = this.renderer.domElement;
-    const down = (x: number) => { this.dragging = true; this.lastX = x; this.autoRotate = false; };
+    // Drag to rotate. No auto-rotation: the creature only spins when you spin it.
+    const down = (x: number) => { this.dragging = true; this.lastX = x; };
     const move = (x: number) => { if (this.dragging) { this.spin += (x - this.lastX) * 0.01; this.lastX = x; } };
-    const up = () => { this.dragging = false; setTimeout(() => (this.autoRotate = true), 2500); };
+    const up = () => { this.dragging = false; };
     el.addEventListener("pointerdown", (e) => down(e.clientX));
     window.addEventListener("pointermove", (e) => move(e.clientX));
     window.addEventListener("pointerup", up);
@@ -121,6 +122,7 @@ export class CreatureScene {
       const m = o as THREE.Mesh;
       if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
     });
+    this.mouthBaseY = this.built.parts.mouth.scale.y;
     this.rig.add(this.built.group);
   }
 
@@ -132,28 +134,60 @@ export class CreatureScene {
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop);
     this.t += 0.016;
-    if (this.autoRotate) this.spin += 0.004;
+    // Rotation is drag-only: the rig holds wherever the user left it.
     this.rig.rotation.y = this.spin;
 
     if (this.built) {
-      const { body, head, eyes } = this.built.parts;
-      // Breathe: gentle scale pulse on the body.
-      const breathe = 1 + Math.sin(this.t * 1.8) * 0.025;
-      body.scale.x = breathe;
-      body.scale.z = breathe;
-      // Bob the whole rig.
-      this.rig.position.y = Math.sin(this.t * 1.4) * 0.05;
-      // Bounce decays after a feed.
+      const t = this.t;
+      const { body, head, eyes, mouth, arms, legs } = this.built.parts;
+
+      // Breathing: two sine bands (a slow deep breath plus a faster flutter) so
+      // it never looks metronomic. Belly expands a touch more than it rises.
+      const breath = Math.sin(t * 1.5) * 0.7 + Math.sin(t * 2.9 + 1.1) * 0.3;
+      body.scale.x = 1 + breath * 0.04;
+      body.scale.z = 1 + breath * 0.04;
+      body.scale.y = 1 + breath * 0.022;
+      // The whole rig bobs and sways gently, like it is balancing.
+      this.rig.position.y = Math.sin(t * 1.5) * 0.05;
+      this.rig.rotation.z = Math.sin(t * 0.8) * 0.02;
+
+      // Feed bounce, decays.
       if (this.bounce > 0) {
         this.rig.position.y += Math.sin(this.bounce * Math.PI) * 0.4;
         this.bounce = Math.max(0, this.bounce - 0.04);
       }
-      // Mood: a sad creature droops its head and dims; happy perks up.
+
+      // Head: droop by mood, plus a slow idle lookaround (it glances about).
       const droop = this.mood === "sad" ? -0.25 : this.mood === "ok" ? -0.08 : 0;
-      head.rotation.x = droop + Math.sin(this.t * 1.2) * 0.04;
-      // Blink: squash eyes briefly on a slow cycle.
-      const blink = Math.sin(this.t * 0.6) > 0.97 ? 0.1 : 1;
-      for (const e of eyes) e.scale.y = blink;
+      head.rotation.x = droop + Math.sin(t * 0.9) * 0.05;
+      head.rotation.y = Math.sin(t * 0.37) * 0.18; // lazy turning of the head
+
+      // Eyes: occasional quick blinks (not a smooth sine) plus tiny saccades so
+      // the gaze flickers and feels alive.
+      const blink = blinkAmount(t);
+      const sacc = Math.sin(t * 0.31) * 0.02 + (pulse(t, 2.3, 0.05) ? 0.05 : 0);
+      for (const e of eyes) {
+        e.scale.y = blink;
+        e.rotation.y = sacc;
+      }
+
+      // Mouth: opens and closes once in a while, like it is chirping or chewing.
+      const talk = pulse(t, 5.0, 0.12) ? 1 + Math.abs(Math.sin(t * 14)) * 0.9 : 1;
+      mouth.scale.y = this.mouthBaseY * talk;
+
+      // Arms: a slow idle sway, with an occasional bigger wave.
+      const wave = pulse(t, 7.0, 0.1) ? Math.sin(t * 9) * 0.4 : 0;
+      arms.children.forEach((arm, i) => {
+        const side = i % 2 === 0 ? -1 : 1;
+        arm.rotation.x = Math.sin(t * 1.1 + i) * 0.12 + wave * side;
+      });
+
+      // Legs: a small periodic shuffle/tap once in a while.
+      const step = pulse(t, 6.0, 0.12);
+      legs.children.forEach((leg, i) => {
+        if (leg.userData.baseY === undefined) leg.userData.baseY = leg.position.y;
+        leg.position.y = leg.userData.baseY + (step ? Math.max(0, Math.sin(t * 12 + i * 1.7)) * 0.06 : 0);
+      });
     }
     this.composer.render();
   };
@@ -164,4 +198,20 @@ export class CreatureScene {
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
+}
+
+// True for a short window of length `width` (in seconds) once every `period`
+// seconds. Used for occasional gestures (a wave, a chirp, a step) so the
+// creature does things "once in a while" instead of constantly.
+function pulse(t: number, period: number, width: number): boolean {
+  return t % period < width;
+}
+
+// Discrete blinks: eyes are open (1) almost always, snapping near-shut for a
+// fraction of a second a couple of times every few seconds. Two offset timers
+// so blinks are not perfectly periodic.
+function blinkAmount(t: number): number {
+  const a = t % 4.3 < 0.12;
+  const b = t % 6.7 < 0.1;
+  return a || b ? 0.12 : 1;
 }
