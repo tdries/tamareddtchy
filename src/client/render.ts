@@ -44,33 +44,43 @@ export function creatureColors(genome: Genome): CreatureColors {
   return { primary: GENE_COLOR[a], secondary: GENE_COLOR[b ?? a] };
 }
 
-// A soft, organic blob: an icosphere we can dent. Reused for every body part so
-// the whole creature reads as one squishy material.
+// A soft, organic blob: a smooth icosphere we dent with low-frequency, spatially
+// coherent noise so it reads as gooey lumps, not spikes. Reused for every body
+// part so the whole creature looks like one squishy material.
 function blob(radius: number, detail: number, color: number, wobble = 0): THREE.Mesh {
   const geo = new THREE.IcosahedronGeometry(radius, detail);
   if (wobble > 0) {
     const pos = geo.attributes.position;
+    const amp = Math.min(0.22, wobble * 0.16); // damped: lumps, never thorns
     for (let i = 0; i < pos.count; i++) {
-      const n = 1 + (pseudoNoise(i) - 0.5) * wobble;
-      pos.setXYZ(i, pos.getX(i) * n, pos.getY(i) * n, pos.getZ(i) * n);
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      // Sum of a few low-frequency sine bands keyed on POSITION (not index), so
+      // neighbouring vertices move together into smooth bulges.
+      const d =
+        Math.sin(x * 1.7 + 0.5) * Math.cos(y * 1.9) +
+        Math.sin(y * 2.3 + 1.3) * Math.cos(z * 1.5) +
+        Math.sin(z * 1.6 + 2.1) * Math.cos(x * 2.0);
+      const n = 1 + (d / 3) * amp;
+      pos.setXYZ(i, x * n, y * n, z * n);
     }
     pos.needsUpdate = true;
-    geo.computeVertexNormals();
   }
-  const mat = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.45,
-    metalness: 0.05,
-    flatShading: false,
-  });
-  return new THREE.Mesh(geo, mat);
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, skinMaterial(color));
 }
 
-// Deterministic per-vertex jitter (no Math.random: keeps render reproducible and
-// testable). Cheap hash -> 0..1.
-function pseudoNoise(i: number): number {
-  const x = Math.sin(i * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
+// Soft, slightly translucent "squishy pet" skin. A touch of emissive in the
+// body color fakes subsurface glow; low roughness gives a wet, alive sheen.
+function skinMaterial(color: number): THREE.MeshStandardMaterial {
+  const c = new THREE.Color(color);
+  const emissive = c.clone().multiplyScalar(0.18);
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.32,
+    metalness: 0.0,
+    emissive,
+    flatShading: false,
+  });
 }
 
 // Within-pair lean in [-1, 1]; positive favors the A (first) gene of the pair.
@@ -114,7 +124,7 @@ export function buildCreature(
   // --- Torso (pair: craft / mayhem). Order = tidy sphere, chaos = lumpy blob. ---
   const torsoLean = lean(genome, "craft", "mayhem"); // + = order, - = chaos
   const chaos = (0.5 - torsoLean / 2) * 0.9 + mutate * 0.5;
-  const body = blob(1, 4, colors.primary, chaos);
+  const body = blob(1, 5, colors.primary, chaos); // higher detail = gooier
   body.scale.set(1, 1.05 - torsoLean * 0.15, 1);
   group.add(body);
 
@@ -122,29 +132,62 @@ export function buildCreature(
   const headGroup = new THREE.Group();
   const headLean = lean(genome, "knowledge", "vitality");
   const headSize = 0.55 + magnitude(genome, "knowledge", "vitality") * 0.25 + (headLean > 0 ? 0.12 : 0);
-  const head = blob(headSize, 3, colors.primary, 0.15 + mutate * 0.3);
+  const head = blob(headSize, 4, colors.primary, 0.15 + mutate * 0.3);
   head.scale.y = headLean > 0 ? 1.15 : 0.92; // domed vs sleek
   headGroup.add(head);
-  headGroup.position.set(0, 1.05, 0);
+  // Sit the head above and slightly forward of the torso so the face is never
+  // occluded by the body's lumps.
+  headGroup.position.set(0, 1.15, 0.12);
 
-  // --- Eyes / face (pair: tech / heart). Tech = small visor eyes, heart = big. ---
+  // --- Face: eyes, nose, mouth (all the pair: tech / heart). ---
+  // Tech leans toward a small, cool, deadpan visor face; Heart leans toward big
+  // warm eyes, a button nose, and a wide smile. Nose and mouth are sub-features
+  // of the same pair, so the face reads as one coherent expression.
   const eyeLean = lean(genome, "tech", "heart"); // + tech, - heart
-  const eyeR = eyeLean < 0 ? 0.22 : 0.13; // heart = big doe eyes
+  const warm = (1 - eyeLean) / 2; // 0 = full tech, 1 = full heart
+  const eyeR = 0.13 + warm * 0.11; // heart = big doe eyes
+  const faceZ = headSize * 0.82;
   const eyes: THREE.Mesh[] = [];
   for (const dx of [-0.22, 0.22]) {
     const white = new THREE.Mesh(
-      new THREE.SphereGeometry(eyeR, 16, 16),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 }),
+      new THREE.SphereGeometry(eyeR, 20, 20),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.12, metalness: 0 }),
     );
-    white.position.set(dx, 0.02, headSize * 0.82);
+    white.position.set(dx, 0.04, faceZ);
     const pupil = new THREE.Mesh(
-      new THREE.SphereGeometry(eyeR * 0.55, 12, 12),
-      new THREE.MeshStandardMaterial({ color: 0x161616 }),
+      new THREE.SphereGeometry(eyeR * 0.55, 14, 14),
+      new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.2 }),
     );
-    pupil.position.set(dx, 0.02, headSize * 0.82 + eyeR * 0.6);
-    headGroup.add(white, pupil);
+    pupil.position.set(dx, 0.04, faceZ + eyeR * 0.62);
+    // tiny catchlight for the "alive" look
+    const glint = new THREE.Mesh(
+      new THREE.SphereGeometry(eyeR * 0.18, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x888888 }),
+    );
+    glint.position.set(dx + eyeR * 0.2, 0.04 + eyeR * 0.25, faceZ + eyeR * 0.7);
+    headGroup.add(white, pupil, glint);
     eyes.push(white);
   }
+
+  // Nose: a small button (heart) shrinking to almost nothing (tech).
+  const noseR = 0.04 + warm * 0.06;
+  const nose = new THREE.Mesh(
+    new THREE.SphereGeometry(noseR, 12, 12),
+    skinMaterial(colors.secondary),
+  );
+  nose.position.set(0, -0.06, faceZ + 0.04);
+  headGroup.add(nose);
+
+  // Mouth: a torus arc. Heart = wide upward smile; tech = small flat line.
+  const smile = -0.4 + warm * 1.2; // controls how curved/wide
+  const mouth = new THREE.Mesh(
+    new THREE.TorusGeometry(0.08 + warm * 0.1, 0.022, 8, 16, Math.PI * (0.6 + warm * 0.8)),
+    new THREE.MeshStandardMaterial({ color: 0x2a1418, roughness: 0.5 }),
+  );
+  mouth.position.set(0, -0.2 - warm * 0.04, faceZ);
+  mouth.rotation.z = Math.PI + (smile < 0 ? Math.PI : 0); // flip for frown vs smile
+  headGroup.add(mouth);
+
   group.add(headGroup);
 
   // --- Arms (pair: pulse / lore). Now = antenna arms, forever = scroll arms. ---
@@ -188,31 +231,47 @@ export function buildCreature(
   }
   group.add(legGroup);
 
-  // --- Accessory / aura (pair: earth / fiction). Real = leaf/star, dream = hat. ---
+  // --- Attributes / aura (pair: earth / fiction). Real = orbiting nature motes
+  // and little horns; dream = wizard hat plus a glowing magic orb. The number of
+  // attributes scales with the pair magnitude, so a developed creature is more
+  // decorated. Generation adds extra motes on top, so prestige is visible. ---
   const accGroup = new THREE.Group();
   const accLean = lean(genome, "earth", "fiction"); // + earth, - fiction
   const accMag = magnitude(genome, "earth", "fiction");
   if (accMag > 0.12) {
     if (accLean >= 0) {
-      // Earth: little orbiting leaves/stars
-      const n = 3 + Math.round(accMag * 3);
+      // Earth: glowing orbiting motes + two little nub horns.
+      const n = 3 + Math.round(accMag * 3) + Math.round(mutate * 2);
       for (let i = 0; i < n; i++) {
         const ang = (i / n) * Math.PI * 2;
         const star = new THREE.Mesh(
-          new THREE.TetrahedronGeometry(0.12),
-          new THREE.MeshStandardMaterial({ color: GENE_COLOR.earth, emissive: 0x224411, roughness: 0.4 }),
+          new THREE.IcosahedronGeometry(0.1, 0),
+          new THREE.MeshStandardMaterial({ color: GENE_COLOR.earth, emissive: 0x2e5a1c, emissiveIntensity: 0.8, roughness: 0.35 }),
         );
-        star.position.set(Math.cos(ang) * 1.5, 1.3, Math.sin(ang) * 1.5);
+        star.position.set(Math.cos(ang) * 1.5, 1.2 + Math.sin(ang * 2) * 0.2, Math.sin(ang) * 1.5);
         accGroup.add(star);
       }
+      for (const dx of [-0.22, 0.22]) {
+        const horn = new THREE.Mesh(
+          new THREE.ConeGeometry(0.06, 0.22, 10),
+          skinMaterial(colors.secondary),
+        );
+        horn.position.set(dx, 1.05 + headSize * 0.85, 0);
+        accGroup.add(horn);
+      }
     } else {
-      // Fiction: a wizard hat / cape
+      // Fiction: a wizard hat plus a floating glowing orb.
       const hat = new THREE.Mesh(
-        new THREE.ConeGeometry(0.45, 0.9, 16),
-        new THREE.MeshStandardMaterial({ color: GENE_COLOR.fiction, roughness: 0.4, emissive: 0x1a0033 }),
+        new THREE.ConeGeometry(0.45, 0.9, 20),
+        new THREE.MeshStandardMaterial({ color: GENE_COLOR.fiction, roughness: 0.35, emissive: 0x2a0a55, emissiveIntensity: 0.7 }),
       );
       hat.position.set(0, 1.05 + headSize, 0);
-      accGroup.add(hat);
+      const orb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: GENE_COLOR.fiction, emissiveIntensity: 1.4, roughness: 0.1 }),
+      );
+      orb.position.set(0.9, 0.9, 0.3);
+      accGroup.add(hat, orb);
     }
   }
   group.add(accGroup);

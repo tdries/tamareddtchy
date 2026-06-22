@@ -4,6 +4,9 @@
 // so this is not unit-tested; the pure geometry in render.ts is.
 
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { buildCreature, type BuildResult } from "./render.js";
 import type { Genome } from "../shared/genome.js";
 
@@ -23,10 +26,17 @@ export class CreatureScene {
   private mood: Mood = "happy";
   private bounce = 0; // decays; spikes when fed
   private raf = 0;
+  private composer: EffectComposer;
+  private bloom: UnrealBloomPass;
 
   constructor(private host: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Filmic tone mapping makes the emissive glow read as light, not flat color.
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
     this.resize();
     host.appendChild(this.renderer.domElement);
 
@@ -34,16 +44,42 @@ export class CreatureScene {
     this.camera = new THREE.PerspectiveCamera(42, this.aspect(), 0.1, 100);
     this.camera.position.set(0, 0.3, 4.4);
 
-    // Soft three-point-ish lighting for a friendly, alive look.
-    const key = new THREE.DirectionalLight(0xffffff, 1.6);
-    key.position.set(3, 4, 5);
+    // Soft, warm-cool key/fill/rim plus a hemisphere for gentle ambient bounce.
+    const key = new THREE.DirectionalLight(0xffffff, 2.0);
+    key.position.set(3, 5, 5);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.camera.near = 0.5;
+    key.shadow.camera.far = 20;
+    key.shadow.bias = -0.0008;
     const fill = new THREE.DirectionalLight(0xbcd4ff, 0.6);
     fill.position.set(-4, 1, 2);
-    const rim = new THREE.DirectionalLight(0xffd9a8, 0.5);
+    const rim = new THREE.DirectionalLight(0xffd9a8, 0.7);
     rim.position.set(0, 3, -4);
-    this.scene.add(key, fill, rim, new THREE.AmbientLight(0xffffff, 0.55));
+    this.scene.add(
+      key,
+      fill,
+      rim,
+      new THREE.HemisphereLight(0xcfe0ff, 0x3a2a55, 0.7),
+    );
+
+    // A soft contact-shadow floor so the creature feels grounded in the dish.
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(2.4, 48),
+      new THREE.ShadowMaterial({ opacity: 0.35 }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -1.45;
+    floor.receiveShadow = true;
+    this.scene.add(floor);
 
     this.scene.add(this.rig);
+
+    // Soft bloom so the aura, orb, and emissive skin glow.
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.55, 0.7);
+    this.composer.addPass(this.bloom);
 
     this.bindDrag();
     window.addEventListener("resize", () => this.resize());
@@ -62,6 +98,8 @@ export class CreatureScene {
       this.camera.aspect = this.aspect();
       this.camera.updateProjectionMatrix();
     }
+    this.composer?.setSize(r.width, r.height);
+    this.bloom?.setSize(r.width, r.height);
   }
 
   private bindDrag() {
@@ -78,6 +116,11 @@ export class CreatureScene {
   setCreature(genome: Genome, generation: number, xp: number) {
     this.rig.clear();
     this.built = buildCreature(genome, generation, xp);
+    // Every solid mesh casts and receives soft shadows.
+    this.built.group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+    });
     this.rig.add(this.built.group);
   }
 
@@ -112,11 +155,12 @@ export class CreatureScene {
       const blink = Math.sin(this.t * 0.6) > 0.97 ? 0.1 : 1;
       for (const e of eyes) e.scale.y = blink;
     }
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   };
 
   dispose() {
     cancelAnimationFrame(this.raf);
+    this.composer.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
