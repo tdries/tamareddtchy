@@ -18,6 +18,7 @@ import {
 import { type FeedKind, stage } from "../shared/creature.js";
 import * as mating from "../shared/mating.js";
 import { formForCreature, blendForms } from "./animals.js";
+import { startWorld, type WorldHandle } from "./worldScene.js";
 import * as api from "./api.js";
 
 const view = document.getElementById("view")!;
@@ -29,18 +30,21 @@ let nurseryScene: CreatureScene | null = null;
 const miniScenes: CreatureScene[] = [];
 let trioScenes: CreatureScene[] = []; // parents + child preview in incubating rows
 let requestPoll: number | null = null;
+let worldHandle: WorldHandle | null = null;
 
-type Tab = "nursery" | "mate" | "board";
+type Tab = "nursery" | "world" | "mate" | "board";
 
 function currentTab(): Tab {
   const url = new URL(window.location.href);
   let t = url.searchParams.get("tab") as Tab;
   // Genome merged into the nursery; keep old ?tab=genome links working.
   if ((t as string) === "genome") t = "nursery";
-  return (["nursery", "mate", "board"] as Tab[]).includes(t) ? t : "nursery";
+  return (["nursery", "world", "mate", "board"] as Tab[]).includes(t) ? t : "nursery";
 }
 
 function disposeScenes() {
+  worldHandle?.dispose();
+  worldHandle = null;
   nurseryScene?.dispose();
   nurseryScene = null;
   while (miniScenes.length) miniScenes.pop()!.dispose();
@@ -79,8 +83,34 @@ async function render() {
     b.classList.toggle("active", (b as HTMLElement).dataset.tab === tab);
   }
   if (tab === "nursery") return renderNursery();
+  if (tab === "world") return renderWorld();
   if (tab === "mate") return renderMate();
   if (tab === "board") return renderBoard();
+}
+
+// --------------------------------- world -----------------------------------
+// The living 3D arena where the subreddit's creatures coexist, roam, eat, and
+// breed on contact. Population = the player's creatures plus the rivals from the
+// mate market (the subreddit's residents).
+async function renderWorld() {
+  const c = state.active!;
+  const cards = await api.mateMarket(c); // the other residents of the sub
+  const population = [c, ...state.creatures.filter((x) => x.id !== c.id), ...cards.map((k) => k.creature)];
+
+  view.innerHTML = `
+    <section class="screen">
+      <p class="eyebrow">The world</p>
+      <h1 class="title">r/tamareddtchy, alive</h1>
+      <p class="sub">Every creature in the subreddit lives here together. They get hungry, seek food, find company, and breed on their own. Drag to look around. Nobody is scripted: behavior emerges from each creature's drives.</p>
+      <div class="arena" id="arena"></div>
+      <div class="arena-log" id="arena-log">Watching the world wake up...</div>
+    </section>`;
+
+  worldHandle = startWorld(document.getElementById("arena")!, population);
+  worldHandle.onEvent((msg) => {
+    const log = document.getElementById("arena-log");
+    if (log) log.textContent = msg;
+  });
 }
 
 // --------------------------------- onboarding ------------------------------

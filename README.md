@@ -53,6 +53,12 @@ Creatures are grown in 3D from the genome, no model files. Each is born as one o
   <img src="docs/generations/kangaroo.png" width="15%" />
 </p>
 
+## A living world
+
+Every creature in a subreddit coexists in one shared 3D arena. They are not scripted: each carries internal drives (hunger, the need for company, energy) that rise and fall over time, and behavior emerges from whichever drive dominates. A hungry creature seeks food; a lonely one seeks company; two ready adults that meet breed on their own and a baby joins the world. This is a deliberately small seed of a deeper biological simulation (genome to chemistry to neural controller, the Creatures 1996 lineage), built so the early version ships and later phases slot in without a rewrite. See the roadmap in [docs/superpowers/specs/2026-06-23-living-world-design.md](docs/superpowers/specs/2026-06-23-living-world-design.md).
+
+![The living world](docs/screenshots/06-world.png)
+
 ## Screenshots
 
 ### Hatch: tell it who you are
@@ -95,6 +101,8 @@ The leaderboard ranks players by lineage score, which blends generation depth, g
 |---|---|---|
 | Genome model | The 12 genes, 6 opposite pairs, genetics scoring, breeding, lineage score | [src/shared/genome.ts](src/shared/genome.ts), [src/shared/creature.ts](src/shared/creature.ts) |
 | Mating lifecycle | Proposal status, real gestation timer, complementarity-driven success odds | [src/shared/mating.ts](src/shared/mating.ts) |
+| Living world sim | Emergent agent drives, steering, breed-on-contact (pure, tested) | [src/shared/world.ts](src/shared/world.ts) |
+| World arena | The 3D shared space where the subreddit's creatures roam and breed | [src/client/worldScene.ts](src/client/worldScene.ts) |
 | Procedural 3D render | Grows the creature geometry from the genome, no model files | [src/client/render.ts](src/client/render.ts) |
 | Living scene | Three.js scene, lights, turntable, idle animation, mood reactions | [src/client/scene.ts](src/client/scene.ts) |
 | Client UI | Four screens plus onboarding, the distinctive incubator-toy design | [src/client/main.ts](src/client/main.ts), [src/client/style.css](src/client/style.css) |
