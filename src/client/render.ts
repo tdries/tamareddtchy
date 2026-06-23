@@ -47,37 +47,71 @@ export interface CreatureColors {
   secondary: number;
 }
 
-// Color comes from the WHOLE gene distribution, not just the top gene. We blend
-// every gene's hue weighted by how much of the genome it represents, so a 40/30/30
-// creature is a genuine three-way mix and breeding two creatures yields a color
-// that is the real average of their distributions. The primary is the full-genome
-// blend; the secondary leans toward the single most dominant gene for accents.
+// Genes do NOT blend into one averaged color. The creature is mostly its
+// dominant gene's color, and every other active gene shows up as colored SPOTS
+// (calico-style) in proportion to its share of the genome. A blue-dominant
+// creature with some red is blue with red spots, not purple. Breeding averages
+// the two parents' distributions, so the child's spot mix is a real blend of
+// both coats. `primary` is the dominant base (used for limbs/accents too);
+// `secondary` is the second gene for small accent parts.
 export function creatureColors(genome: Genome): CreatureColors {
+  const dom = dominantGenes(genome);
+  return { primary: GENE_COLOR[dom[0]], secondary: GENE_COLOR[dom[1] ?? dom[0]] };
+}
+
+// Paint a per-creature coat texture: the dominant gene as the base, then spots
+// for every active gene sized/counted by its share of the genome. Deterministic
+// from the genome (seeded by the gene values) so the same creature always looks
+// the same and offspring coats are reproducible. Cached per distinct genome key.
+const COAT_CACHE = new Map<string, THREE.Texture | null>();
+function coatTexture(genome: Genome): THREE.Texture | null {
+  if (typeof document === "undefined") return null; // tests: flat color
   const total = GENES.reduce((s, g) => s + genome[g], 0) || 1;
-  // Weighted average of all gene hues in linear RGB (perceptually better blends).
-  const acc = new THREE.Color(0, 0, 0);
-  const tmp = new THREE.Color();
-  for (const g of GENES) {
-    const w = genome[g] / total;
-    if (w <= 0) continue;
-    tmp.set(GENE_COLOR[g]).convertSRGBToLinear();
-    acc.r += tmp.r * w;
-    acc.g += tmp.g * w;
-    acc.b += tmp.b * w;
+  const dom = dominantGenes(genome);
+  const key = GENES.map((g) => Math.round(genome[g])).join(",");
+  if (COAT_CACHE.has(key)) return COAT_CACHE.get(key)!;
+
+  const W = 512, H = 256;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d")!;
+  // Base coat = dominant gene's color.
+  ctx.fillStyle = "#" + new THREE.Color(GENE_COLOR[dom[0]]).getHexString();
+  ctx.fillRect(0, 0, W, H);
+
+  // Spots for each non-dominant active gene. Count and size scale with the gene's
+  // share, so a strong secondary gives many big spots, a faint one a few small.
+  let seed = 1;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  for (let gi = 1; gi < dom.length; gi++) {
+    const gene = dom[gi];
+    const share = genome[gene] / total;
+    if (share < 0.02) continue; // ignore negligible genes
+    seed = (genome[gene] * 7919 + gi * 104729) & 0x7fffffff; // stable per gene
+    const count = Math.round(share * 90); // proportion -> number of spots
+    const col = "#" + new THREE.Color(GENE_COLOR[gene]).getHexString();
+    for (let i = 0; i < count; i++) {
+      const x = rnd() * W;
+      const y = rnd() * H;
+      const r = (5 + rnd() * 14) * (0.6 + share * 1.4);
+      ctx.beginPath();
+      ctx.fillStyle = col;
+      ctx.globalAlpha = 0.85;
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  acc.convertLinearToSRGB();
-  // A pure even mix turns muddy grey; pull the blend toward the single dominant
-  // hue a little so creatures stay vivid and identity stays readable.
-  const dom = new THREE.Color(GENE_COLOR[dominantGenes(genome)[0]]);
-  const primary = acc.clone().lerp(dom, 0.35);
-  const secondary = dom.clone().lerp(acc, 0.25);
-  return { primary: primary.getHex(), secondary: secondary.getHex() };
+  ctx.globalAlpha = 1;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  COAT_CACHE.set(key, tex);
+  return tex;
 }
 
 // A soft, organic blob: a smooth icosphere we dent with low-frequency, spatially
 // coherent noise so it reads as gooey lumps, not spikes. Reused for every body
 // part so the whole creature looks like one squishy material.
-function blob(radius: number, detail: number, color: number, wobble = 0): THREE.Mesh {
+function blob(radius: number, detail: number, color: number, wobble = 0, coat?: THREE.Texture | null): THREE.Mesh {
   const geo = new THREE.IcosahedronGeometry(radius, detail);
   if (wobble > 0) {
     const pos = geo.attributes.position;
@@ -96,7 +130,7 @@ function blob(radius: number, detail: number, color: number, wobble = 0): THREE.
     pos.needsUpdate = true;
   }
   geo.computeVertexNormals();
-  return new THREE.Mesh(geo, skinMaterial(color));
+  return new THREE.Mesh(geo, skinMaterial(color, coat));
 }
 
 // Darken or lighten a hex color by a factor (1 = same, <1 darker, >1 lighter).
@@ -177,7 +211,7 @@ function furTexture(): THREE.Texture | null {
 const FUR_SHELLS = 14;
 const BODY_FUR_LEN = 0.16;
 const HEAD_FUR_LEN = 0.12;
-function addFur(mesh: THREE.Mesh, color: number, length = 0.12): void {
+function addFur(mesh: THREE.Mesh, color: number, length = 0.12, coat?: THREE.Texture | null): void {
   const tex = furTexture();
   if (!tex) return; // no DOM (tests): skip fur
   const base = new THREE.Color(color);
@@ -186,8 +220,10 @@ function addFur(mesh: THREE.Mesh, color: number, length = 0.12): void {
     const shell = new THREE.Mesh(
       mesh.geometry,
       new THREE.MeshStandardMaterial({
-        // Tips slightly lighter than roots, so the coat has depth.
-        color: base.clone().multiplyScalar(0.62 + f * 0.45),
+        // The fur carries the calico coat map so spots show in the fuzz too; tips
+        // lighten outward for depth. Without a coat, fall back to the base color.
+        color: coat ? new THREE.Color(0xffffff).multiplyScalar(0.62 + f * 0.45) : base.clone().multiplyScalar(0.62 + f * 0.45),
+        map: coat ?? undefined,
         roughness: 1.0,
         metalness: 0,
         alphaMap: tex,
@@ -210,11 +246,15 @@ function addFur(mesh: THREE.Mesh, color: number, length = 0.12): void {
 // it reads as soft fur, not plastic. We rely on the environment map + lights for
 // brightness rather than emissive, so the creature does not glow from within and
 // wash out (a faint emissive only keeps shadowed sides from going pure black).
-function skinMaterial(color: number): THREE.MeshStandardMaterial {
+function skinMaterial(color: number, coat?: THREE.Texture | null): THREE.MeshStandardMaterial {
   const c = new THREE.Color(color);
   const emissive = c.clone().multiplyScalar(0.04);
   return new THREE.MeshStandardMaterial({
-    color,
+    // When a coat texture is supplied (body/head), the map carries the calico
+    // color, so the base color is white to avoid tinting it. Otherwise use the
+    // flat color (limbs, ears, accents).
+    color: coat ? 0xffffff : color,
+    map: coat ?? undefined,
     roughness: 0.82, // soft, fur-like
     metalness: 0.0,
     roughnessMap: fuzzTexture() ?? undefined,
@@ -262,6 +302,7 @@ export function buildCreature(
   form: AnimalForm = NEUTRAL_FORM,
 ): BuildResult {
   const colors = creatureColors(genome);
+  const coat = coatTexture(genome); // calico spot map painted from the genome
   const group = new THREE.Group();
   const s = STAGE_SCALE[stage(xp)];
   // Generation mutation: stronger now so a Gen-10 is visibly wilder than a Gen-1.
@@ -277,10 +318,10 @@ export function buildCreature(
   // --- Torso (pair: craft / mayhem, shaped by the animal form). ---
   const torsoLean = lean(genome, "craft", "mayhem"); // + = order, - = chaos
   const chaos = (0.5 - torsoLean / 2) * 0.7 + mutate * 0.5;
-  const body = blob(1, 5, colors.primary, chaos);
+  const body = blob(1, 5, colors.primary, chaos, coat);
   // Animal proportions: elongate (horse/croc), heighten, and hump the back.
   body.scale.set(1, (1.05 - torsoLean * 0.12) * form.bodyTall, form.bodyLong);
-  addFur(body, colors.primary, BODY_FUR_LEN);
+  addFur(body, colors.primary, BODY_FUR_LEN, coat);
   if (form.hump > 0.2) {
     const hump = blob(0.55 * form.hump + 0.3, 4, colors.primary, 0.2);
     hump.position.set(0, 0.45, -0.2 * form.bodyLong);
@@ -305,10 +346,10 @@ export function buildCreature(
   const headGroup = new THREE.Group();
   const headLean = lean(genome, "knowledge", "vitality");
   const headSize = 0.5 + magnitude(genome, "knowledge", "vitality") * 0.22 + (headLean > 0 ? 0.1 : 0);
-  const head = blob(headSize, 4, colors.primary, 0.12 + mutate * 0.3);
+  const head = blob(headSize, 4, colors.primary, 0.12 + mutate * 0.3, coat);
   head.scale.y = headLean > 0 ? 1.12 : 0.92; // domed vs sleek
   head.scale.z = 1 + form.headLong * 0.9; // snout/muzzle length
-  addFur(head, colors.primary, HEAD_FUR_LEN);
+  addFur(head, colors.primary, HEAD_FUR_LEN, coat);
   headGroup.add(head);
 
   // Snout cap for long-muzzle animals (croc, horse, elephant), tinted darker.
