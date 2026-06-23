@@ -12,7 +12,7 @@ import { type Gene, type Genome, dominantGenes } from "../shared/genome.js";
 import { type Stage, stage } from "../shared/creature.js";
 import { type AnimalForm } from "./animals.js";
 import { resolveAttributes, buildEye, buildEars, buildHorns, buildHair, buildMouth, buildNose } from "./attributes.js";
-import { type PartName, partsReady, getPart } from "./parts.js";
+import { type PartName, partsReady, getPart, getCreatureMesh } from "./parts.js";
 
 // A plain, no-frills silhouette used when no animal form is supplied (tests, and
 // any caller that does not resolve a form). Roughly a generic round critter.
@@ -191,6 +191,7 @@ export function buildCreature(
   xp: number,
   form: AnimalForm = NEUTRAL_FORM,
   id = "anon",
+  meshName?: string,
 ): BuildResult {
   const colors = creatureColors(genome);
   const attrs = resolveAttributes(genome, form, id);
@@ -198,6 +199,28 @@ export function buildCreature(
   const s = STAGE_SCALE[stage(xp)];
   // Generation mutation: stronger now so a Gen-10 is visibly wilder than a Gen-1.
   const mutate = Math.min(2.4, (generation - 1) * 0.27);
+
+  // If this creature has an image-to-3D mesh (Modly/Hunyuan3D output, cleaned via
+  // ingest_modly.py), render THAT as the whole body, with only the expressive
+  // face overlaid, and skip the procedural assembly. Falls through to procedural
+  // when the mesh is absent or not yet loaded.
+  if (meshName) {
+    const aiMesh = getCreatureMesh(meshName);
+    if (aiMesh) {
+      aiMesh.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+      aiMesh.scale.setScalar(2.2); // normalized unit mesh -> creature size
+      aiMesh.position.y = -0.2;
+      group.add(aiMesh);
+      const headGroupAI = new THREE.Group();
+      group.add(headGroupAI);
+      group.scale.setScalar(s);
+      return {
+        group,
+        parts: { body: aiMesh as unknown as THREE.Mesh, head: headGroupAI, eyes: [], mouth: headGroupAI, arms: new THREE.Group(), legs: new THREE.Group(), tail: new THREE.Group() },
+        colors,
+      };
+    }
+  }
 
   // --- Torso (pair: craft / mayhem, shaped by the animal form). ---
   const torsoLean = lean(genome, "craft", "mayhem"); // + = order, - = chaos

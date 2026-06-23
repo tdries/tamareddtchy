@@ -75,3 +75,30 @@ export function getPart(name: PartName): THREE.Object3D | null {
   if (!src) return null;
   return src.clone(true);
 }
+
+// ----------------------------- creature meshes -----------------------------
+// Full-creature GLBs produced by the image-to-3D pipeline (Modly etc.) and
+// cleaned via scripts/blender/ingest_modly.py into /assets/creatures. These are
+// whole sculpted bodies, used in place of the procedural assembly when present.
+// Loaded on demand by name (data-driven: any creature can have one or not).
+
+const creatureSources = new Map<string, THREE.Object3D | null>();
+
+// Begin loading a creature mesh by name. Resolves whether it loaded or not.
+export function loadCreatureMesh(name: string, base = "/assets/creatures"): Promise<void> {
+  if (creatureSources.has(name)) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    new GLTFLoader().load(
+      `${base}/${name}.glb`,
+      (g) => { creatureSources.set(name, normalize(g.scene)); resolve(); },
+      undefined,
+      () => { creatureSources.set(name, null); resolve(); }, // mark "tried, absent"
+    );
+  });
+}
+
+// Synchronous clone of a loaded creature mesh, or null if not present/loaded.
+export function getCreatureMesh(name: string): THREE.Object3D | null {
+  const src = creatureSources.get(name);
+  return src ? src.clone(true) : null;
+}

@@ -13,3 +13,6 @@ logs/
 *.bak
 docs/screenshots/.tmp/
 .venv/
+
+# raw image-to-3D inputs (ingested into assets/creatures)
+assets/incoming/*.glb
