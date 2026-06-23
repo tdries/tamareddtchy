@@ -11,7 +11,7 @@ import * as THREE from "three";
 import { type Gene, type Genome, dominantGenes } from "../shared/genome.js";
 import { type Stage, stage } from "../shared/creature.js";
 import { type AnimalForm } from "./animals.js";
-import { resolveAttributes, buildEye, buildEars, buildHorns, buildHair } from "./attributes.js";
+import { resolveAttributes, buildEye, buildEars, buildHorns, buildHair, buildMouth, buildNose } from "./attributes.js";
 import { type PartName, partsReady, getPart } from "./parts.js";
 
 // A plain, no-frills silhouette used when no animal form is supplied (tests, and
@@ -174,7 +174,7 @@ export interface BuildResult {
     body: THREE.Mesh;
     head: THREE.Group;
     eyes: THREE.Object3D[];
-    mouth: THREE.Mesh;
+    mouth: THREE.Object3D;
     arms: THREE.Group; // children are shoulder pivots (userData.side, .elbow)
     legs: THREE.Group; // children are hip pivots (userData.knee, .i)
     tail: THREE.Group;
@@ -287,26 +287,16 @@ export function buildCreature(
     eyes.push(eye);
   }
 
-  // Nose: a visible button at the snout tip.
-  const noseR = 0.1 + warm * 0.05;
-  const nose = new THREE.Mesh(
-    new THREE.SphereGeometry(noseR, 16, 16),
-    skinMaterial(shade(colors.markings, 0.8)),
-  );
+  // Nose: from the library (button / snout / beak / trunk / flat), at the tip.
+  const noseR = (0.1 + warm * 0.05) * 1.1;
   const noseY = (-0.06 - form.headLong * 0.08) * headSize * 2;
+  const nose = buildNose(attrs.nose, noseR, shade(colors.markings, 0.85));
   nose.position.set(0, noseY, snoutTipZ);
-  nose.scale.z = 1.2;
   headGroup.add(nose);
 
-  // Mouth: a thick rounded smile arc, just under the nose.
-  const mouthWide = 0.11 + warm * 0.12;
-  const arc = Math.PI * (0.45 + warm * 0.7);
-  const mouth = new THREE.Mesh(
-    new THREE.TorusGeometry(mouthWide, 0.028, 12, 28, arc),
-    new THREE.MeshStandardMaterial({ color: 0x3a1820, roughness: 0.45 }),
-  );
-  mouth.position.set(0, noseY - 0.12 - warm * 0.03, snoutTipZ - 0.02);
-  mouth.rotation.z = -Math.PI / 2 - arc / 2;
+  // Mouth: from the library (smile / grin / frown / open / fang / beak).
+  const mouth = buildMouth(attrs.mouth, 0.12 + warm * 0.1);
+  mouth.position.set(0, noseY - 0.13 - warm * 0.03, snoutTipZ - 0.02);
   headGroup.add(mouth);
 
   group.add(headGroup);
@@ -373,7 +363,7 @@ export function buildCreature(
     knee.position.y = -legLen * 0.5;
     const shin = limbSegment(legLen * 0.5, legThick * 0.85, colors.limbs);
     shin.position.y = -legLen * 0.25;
-    const foot = paw(legThick * 1.5, 3, shade(colors.limbs, 0.82));
+    const foot = paw(legThick * 1.5, 3, shade(colors.limbs, 0.82), footType(form));
     foot.position.set(0, -legLen * 0.5, legThick * 0.5);
     knee.add(shin, foot);
     thigh.add(knee);
@@ -425,18 +415,39 @@ function limbSegment(len: number, thick: number, color: number): THREE.Group {
   return g;
 }
 
-// A paw/hand: a rounded pad with a few toes/fingers splayed at the front, so
-// the limbs end in something detailed rather than a bare ball.
-function paw(r: number, toes: number, color: number): THREE.Group {
+type FootType = "paw" | "hoof" | "claw";
+
+// Decide a foot style from the animal form: heavy hoofed grazers, clawed
+// predators/birds, soft paws for the rest.
+function footType(form: AnimalForm): FootType {
+  if (form.bodyLong > 1.45 && form.legLen > 1.3) return "hoof"; // horse/zebra/giraffe
+  if (form.earTall > 0.7 && form.legThick < 1.0) return "claw"; // foxy/cat predators
+  return "paw";
+}
+
+// A foot/hand in one of three styles, so limbs end in something characterful.
+function paw(r: number, toes: number, color: number, type: FootType = "paw"): THREE.Group {
   const g = new THREE.Group();
+  if (type === "hoof") {
+    const hoof = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 1.1, r * 1.0, 10), skinMaterial(shade(color, 0.7)));
+    g.add(hoof);
+    return g;
+  }
   const pad = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 14), skinMaterial(color));
   pad.scale.set(1.1, 0.7, 1.2);
   g.add(pad);
-  for (let i = 0; i < toes; i++) {
-    const t = (i - (toes - 1) / 2) / Math.max(1, toes); // -0.5..0.5
-    const toe = new THREE.Mesh(new THREE.SphereGeometry(r * 0.42, 10, 10), skinMaterial(shade(color, 0.9)));
-    toe.position.set(t * r * 1.4, -r * 0.1, r * 0.9);
-    g.add(toe);
+  const n = type === "claw" ? 3 : toes;
+  for (let i = 0; i < n; i++) {
+    const t = (i - (n - 1) / 2) / Math.max(1, n);
+    if (type === "claw") {
+      const claw = new THREE.Mesh(new THREE.ConeGeometry(r * 0.16, r * 0.7, 6), skinMaterial(shade(color, 0.6)));
+      claw.position.set(t * r * 1.3, -r * 0.1, r * 1.1); claw.rotation.x = Math.PI / 2.2;
+      g.add(claw);
+    } else {
+      const toe = new THREE.Mesh(new THREE.SphereGeometry(r * 0.42, 10, 10), skinMaterial(shade(color, 0.9)));
+      toe.position.set(t * r * 1.4, -r * 0.1, r * 0.9);
+      g.add(toe);
+    }
   }
   return g;
 }

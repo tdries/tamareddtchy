@@ -34,8 +34,8 @@ function pick<T>(arr: T[], t: number): T {
 // EYES  (6 types) -- driven by the Tech/Heart pair (personality) + size
 // =====================================================================
 
-export type EyeType = "round" | "doe" | "sleepy" | "wide" | "visor" | "beady";
-export const EYE_TYPES: EyeType[] = ["beady", "round", "doe", "wide", "sleepy", "visor"];
+export type EyeType = "round" | "doe" | "sleepy" | "wide" | "visor" | "beady" | "angry" | "cyclops";
+export const EYE_TYPES: EyeType[] = ["beady", "round", "doe", "wide", "sleepy", "visor", "angry", "cyclops"];
 
 // One eye, built at the origin facing +Z. The renderer positions/mirrors a pair.
 export function buildEye(type: EyeType, r: number): THREE.Group {
@@ -82,21 +82,115 @@ export function buildEye(type: EyeType, r: number): THREE.Group {
         new THREE.MeshStandardMaterial({ color: 0x66ffcc, emissive: 0x1aa37a, emissiveIntensity: 1.2, roughness: 0.2 }));
       bar.rotation.z = Math.PI / 2; bar.position.z = r * 0.2; g.add(bar); break;
     }
+    case "angry": { // a round eye with an angled brow ridge over it
+      const w = new THREE.Mesh(new THREE.SphereGeometry(r, 22, 22), whiteMat);
+      const p = new THREE.Mesh(new THREE.SphereGeometry(r * 0.5, 16, 16), pupilMat);
+      p.position.z = r * 0.6;
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(r * 1.6, r * 0.4, r * 0.4),
+        new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.5 }));
+      brow.position.set(0, r * 0.85, r * 0.6); brow.rotation.z = -0.35;
+      g.add(w, p, brow); addGlint(r); break;
+    }
+    case "cyclops": { // a single big central eye (renderer overlaps the pair)
+      const w = new THREE.Mesh(new THREE.SphereGeometry(r * 1.5, 24, 24), whiteMat);
+      const p = new THREE.Mesh(new THREE.SphereGeometry(r * 0.7, 18, 18), pupilMat);
+      p.position.z = r * 1.1; g.add(w, p); addGlint(r * 1.5); break;
+    }
   }
   return g;
 }
 
 export function selectEye(genome: Genome): EyeType {
   // Tech end -> visor/beady; Heart end -> doe/wide; middle -> round/sleepy.
+  // Mayhem-heavy creatures get an angry brow; fiction-heavy ones rarely a cyclops.
   const tech = genome.tech, heart = genome.heart;
   const sum = tech + heart;
   const warm = sum === 0 ? 0.5 : heart / sum; // 0 tech .. 1 heart
+  const top = dominantGenes(genome)[0];
+  if (top === "mayhem") return "angry";
+  if (top === "fiction" && genome.fiction > 140) return "cyclops";
   if (warm > 0.72) return "doe";
   if (warm > 0.58) return "wide";
   if (warm < 0.28) return "visor";
   if (warm < 0.42) return "beady";
-  // middle band: split by overall eye magnitude
   return sum > 120 ? "round" : "sleepy";
+}
+
+// =====================================================================
+// MOUTH (6 types) -- driven by Tech/Heart (expression) + dominant gene
+// =====================================================================
+
+export type MouthType = "smile" | "grin" | "frown" | "open" | "fang" | "beak";
+export const MOUTH_TYPES: MouthType[] = ["smile", "grin", "frown", "open", "fang", "beak"];
+
+// Built at origin facing +Z, sized by `w`. The renderer positions it on the face.
+export function buildMouth(type: MouthType, w: number): THREE.Group {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x3a1820, roughness: 0.5 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const arc = (a: number, tube = 0.03) => {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(w, tube, 10, 24, a), dark);
+    m.rotation.z = -Math.PI / 2 - a / 2; return m;
+  };
+  switch (type) {
+    case "smile": g.add(arc(Math.PI * 0.8)); break;
+    case "grin": { // wide smile + a row of teeth
+      g.add(arc(Math.PI * 1.0, 0.04));
+      for (let i = -2; i <= 2; i++) { const t = new THREE.Mesh(new THREE.BoxGeometry(w * 0.18, w * 0.18, 0.05), white); t.position.set(i * w * 0.32, w * 0.1, 0.02); g.add(t); }
+      break;
+    }
+    case "frown": { const m = arc(Math.PI * 0.7); m.rotation.z = Math.PI / 2 + (Math.PI * 0.7) / 2; m.position.y = -w * 0.3; g.add(m); break; }
+    case "open": { const o = new THREE.Mesh(new THREE.SphereGeometry(w * 0.6, 16, 16), dark); o.scale.set(1, 0.7, 0.5); g.add(o); break; }
+    case "fang": { // grin with two pointy fangs
+      g.add(arc(Math.PI * 0.9));
+      for (const dx of [-1, 1]) { const f = new THREE.Mesh(new THREE.ConeGeometry(w * 0.12, w * 0.4, 6), white); f.position.set(dx * w * 0.4, -w * 0.2, 0.03); f.rotation.x = Math.PI; g.add(f); }
+      break;
+    }
+    case "beak": { const b = new THREE.Mesh(new THREE.ConeGeometry(w * 0.5, w * 0.9, 8), new THREE.MeshStandardMaterial({ color: 0xe0a23a, roughness: 0.5 })); b.rotation.x = Math.PI / 2; g.add(b); break; }
+  }
+  return g;
+}
+
+export function selectMouth(genome: Genome): MouthType {
+  const top = dominantGenes(genome)[0];
+  if (top === "mayhem") return "fang";
+  if (top === "heart") return "grin";
+  if (top === "pulse" || top === "vitality") return "open";
+  if (top === "tech") return "beak";
+  const tech = genome.tech, heart = genome.heart;
+  const warm = tech + heart === 0 ? 0.5 : heart / (tech + heart);
+  return warm < 0.35 ? "frown" : "smile";
+}
+
+// =====================================================================
+// NOSE (5 types) -- driven by the animal form + dominant gene
+// =====================================================================
+
+export type NoseType = "button" | "snout" | "beak" | "trunk" | "flat";
+export const NOSE_TYPES: NoseType[] = ["button", "snout", "beak", "trunk", "flat"];
+
+export function buildNose(type: NoseType, r: number, color: number): THREE.Group {
+  const g = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+  switch (type) {
+    case "button": { const n = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 14), m); n.scale.z = 1.2; g.add(n); break; }
+    case "snout": { const n = new THREE.Mesh(new THREE.SphereGeometry(r * 1.1, 14, 14), m); n.scale.set(1.3, 0.8, 1.4); g.add(n); break; }
+    case "beak": { const n = new THREE.Mesh(new THREE.ConeGeometry(r * 0.9, r * 2.2, 8), new THREE.MeshStandardMaterial({ color: 0xe0a23a, roughness: 0.5 })); n.rotation.x = Math.PI / 2; g.add(n); break; }
+    case "trunk": { // a drooping segmented trunk (elephant)
+      let parent: THREE.Object3D = g;
+      for (let i = 0; i < 4; i++) { const seg = new THREE.Mesh(new THREE.CapsuleGeometry(r * (0.8 - i * 0.12), r * 0.5, 4, 8), m); seg.position.set(0, -r * 0.5, i === 0 ? r : 0); if (i > 0) seg.position.y = -r * 0.6; parent.add(seg); parent = seg; } break;
+    }
+    case "flat": { const n = new THREE.Mesh(new THREE.BoxGeometry(r * 1.4, r * 0.8, r * 0.5), m); g.add(n); break; }
+  }
+  return g;
+}
+
+export function selectNose(genome: Genome, form: AnimalForm): NoseType {
+  if (form.headLong > 0.85) return "trunk"; // elephant-ish
+  if (form.headLong > 0.6) return "snout"; // muzzle animals
+  if (form.snoutWide > 0.85) return "flat"; // hippo/croc broad
+  if (dominantGenes(genome)[0] === "tech") return "beak";
+  return "button";
 }
 
 // =====================================================================
@@ -277,6 +371,8 @@ export interface CreatureAttributes {
   ear: EarType;
   horn: HornType;
   hair: HairType;
+  mouth: MouthType;
+  nose: NoseType;
 }
 export function resolveAttributes(genome: Genome, form: AnimalForm, id: string): CreatureAttributes {
   return {
@@ -284,6 +380,8 @@ export function resolveAttributes(genome: Genome, form: AnimalForm, id: string):
     ear: selectEar(form),
     horn: selectHorn(genome),
     hair: selectHair(genome, form, id),
+    mouth: selectMouth(genome),
+    nose: selectNose(genome, form),
   };
 }
 
