@@ -19,6 +19,7 @@ import { type FeedKind, stage } from "../shared/creature.js";
 import * as mating from "../shared/mating.js";
 import { formForCreature, blendForms } from "./animals.js";
 import { startWorld, type WorldHandle } from "./worldScene.js";
+import { preloadParts } from "./parts.js";
 import * as api from "./api.js";
 
 const view = document.getElementById("view")!;
@@ -454,3 +455,6 @@ tabsEl.addEventListener("click", (e) => {
 });
 
 render();
+// Load the sculpted part library in the background, then re-render so creatures
+// upgrade from primitive fallback to sculpted GLB geometry once assets arrive.
+preloadParts().then(() => render());

@@ -12,6 +12,7 @@ import { type Gene, type Genome, dominantGenes } from "../shared/genome.js";
 import { type Stage, stage } from "../shared/creature.js";
 import { type AnimalForm } from "./animals.js";
 import { resolveAttributes, buildEye, buildEars, buildHorns, buildHair } from "./attributes.js";
+import { type PartName, partsReady, getPart } from "./parts.js";
 
 // A plain, no-frills silhouette used when no animal form is supplied (tests, and
 // any caller that does not resolve a form). Roughly a generic round critter.
@@ -65,10 +66,41 @@ export function creatureColors(genome: Genome): CreatureColors {
   return { body: at(0), belly: at(1), markings: at(2), limbs: at(3), accent: at(4) };
 }
 
-// A soft, organic blob: a smooth icosphere we dent with low-frequency, spatially
-// coherent noise so it reads as gooey lumps, not spikes. Reused for every body
-// part so the whole creature looks like one squishy material.
-function blob(radius: number, detail: number, color: number, wobble = 0): THREE.Mesh {
+// Pull a sculpted GLB part's geometry (Blender-made), scaled into the same
+// radius convention the procedural icosphere uses, or null if the library is not
+// loaded / the part is missing. Merged into a single BufferGeometry so it drops
+// straight into a Mesh and every downstream .scale/.add/.geometry keeps working.
+function sculptGeo(part: PartName | undefined, radius: number): THREE.BufferGeometry | null {
+  if (!part || !partsReady()) return null;
+  const obj = getPart(part);
+  if (!obj) return null;
+  obj.updateMatrixWorld(true);
+  let found: THREE.BufferGeometry | null = null;
+  obj.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && !found) {
+      const g = m.geometry.clone();
+      g.applyMatrix4(m.matrixWorld); // bake the normalize transform in
+      found = g;
+    }
+  });
+  if (!found) return null;
+  // normalize() made the part unit-sized (max dim 1); scale to ~2*radius so it
+  // matches an icosphere of `radius`.
+  (found as THREE.BufferGeometry).scale(radius * 2, radius * 2, radius * 2);
+  (found as THREE.BufferGeometry).computeVertexNormals();
+  return found;
+}
+
+// A soft, organic body part. Uses the SCULPTED Blender geometry when the part
+// library is loaded (rich, organic surface); otherwise falls back to a smooth
+// icosphere dented with low-frequency noise so the game always renders even if
+// assets are slow or missing. Returns a Mesh either way, so all positioning,
+// scaling, child-attachment, and animation code is unchanged.
+function blob(radius: number, detail: number, color: number, wobble = 0, part?: PartName): THREE.Mesh {
+  const sculpted = sculptGeo(part, radius);
+  if (sculpted) return new THREE.Mesh(sculpted, skinMaterial(color));
+
   const geo = new THREE.IcosahedronGeometry(radius, detail);
   if (wobble > 0) {
     const pos = geo.attributes.position;
@@ -170,7 +202,8 @@ export function buildCreature(
   // --- Torso (pair: craft / mayhem, shaped by the animal form). ---
   const torsoLean = lean(genome, "craft", "mayhem"); // + = order, - = chaos
   const chaos = (0.5 - torsoLean / 2) * 0.7 + mutate * 0.5;
-  const body = blob(1, 5, colors.body, chaos);
+  const bodyPart: PartName = form.bodyLong > 1.4 ? "body-long" : form.bodyTall > 1.2 ? "body-tall" : "body-round";
+  const body = blob(1, 5, colors.body, chaos, bodyPart);
   body.scale.set(1, (1.05 - torsoLean * 0.12) * form.bodyTall, form.bodyLong);
   addBelly(body, colors.belly); // symmetric belly panel in the 2nd gene's color
   if (form.hump > 0.2) {
@@ -205,7 +238,8 @@ export function buildCreature(
   const headGroup = new THREE.Group();
   const headLean = lean(genome, "knowledge", "vitality");
   const headSize = 0.5 + magnitude(genome, "knowledge", "vitality") * 0.22 + (headLean > 0 ? 0.1 : 0);
-  const head = blob(headSize, 4, colors.body, 0.12 + mutate * 0.3);
+  const headPart: PartName = form.headLong > 0.6 ? "head-long" : headLean > 0 ? "head-dome" : "head-round";
+  const head = blob(headSize, 4, colors.body, 0.12 + mutate * 0.3, headPart);
   head.scale.y = headLean > 0 ? 1.12 : 0.92; // domed vs sleek
   head.scale.z = 1 + form.headLong * 0.9; // snout/muzzle length
   headGroup.add(head);

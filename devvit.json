@@ -1,27 +1,36 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "tamareddtchy",
+  "name": "blendersville",
   "permissions": {
-    "reddit": { "scope": "moderator" },
+    "reddit": {
+      "scope": "moderator"
+    },
     "redis": true
   },
   "post": {
     "dir": "webroot",
-    "entrypoint": "index.html",
-    "height": "tall"
+    "entrypoints": {
+      "default": {
+        "entry": "index.html",
+        "height": "tall"
+      }
+    }
   },
   "server": {
-    "dir": "src/server",
-    "entrypoint": "index.ts"
+    "dir": "dist/server",
+    "entry": "index.cjs"
   },
   "menu": {
     "items": [
       {
-        "label": "Create a Tamareddtchy nursery",
+        "label": "Create a Blendersville nursery",
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/create-post"
       }
     ]
+  },
+  "dev": {
+    "subreddit": "blendersville_dev"
   }
 }

@@ -200,15 +200,17 @@ app.post("/api/post", async (req, res) => {
   res.json({ ok: true });
 });
 
-// The menu action ("Create a Tamareddtchy nursery") creates the interactive post.
+// The menu action ("Create a Blendersville nursery") creates the INTERACTIVE
+// web-view post. submitCustomPost (not submitPost) is what renders the app:
+// `entry: "default"` points at the post.entrypoints.default in devvit.json.
 app.post("/internal/menu/create-post", async (_req, res) => {
   const sub = context.subredditName;
-  const post = await reddit.submitPost({
+  const post = await reddit.submitCustomPost({
     subredditName: sub!,
-    title: "Tamareddtchy: raise a creature that looks like your Reddit soul",
-    // The web view post type defined in devvit.json.
-    splash: { appDisplayName: "Tamareddtchy" },
-  } as never);
+    title: "Blendersville: raise a creature that looks like your Reddit soul",
+    entry: "default",
+    textFallback: { text: "Blendersville needs a browser that supports interactive posts." },
+  });
   res.json({ navigateTo: post });
 });
 
