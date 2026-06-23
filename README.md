@@ -41,16 +41,16 @@ Reddit games that spike on day one and die on day three all share one flaw: noth
 - **User contributions:** the entire artifact is user generated. Every hatch, evolution, and birth renders an image and posts itself to the subreddit.
 - **Reddit-y:** the game mechanic is upvoting, commenting, and cross community rivalry. Install it in two rival subs and their creatures carry opposite house genes, so the best offspring come from cross subreddit mating.
 
-## Every creature is a furry, procedural animal
+## Every creature is a unique procedural animal
 
-Creatures are grown in 3D from the genome, no model files. Each is born as one of twenty animal forms (dog, cat, horse, fox, bear, and so on), wears a real shell-based fur coat, and is colored by its two dominant genes. Breeding blends both the genomes and the animal forms, so a bloodline visibly mixes color and shape as it climbs the generations. Here is one bloodline from generation 1 to 10, each step a cross with a new partner:
+Creatures are grown in 3D from the genome, no model files. Each is born as one of twenty animal forms (dog, cat, horse, fox, lion, deer, elephant, crocodile, and more), and a deep attribute library gives it a distinct head: six eye types, six ear types, five horn types, eight hairstyles, all chosen from the genome and the animal form. Color is symmetric and designed, not random: the dominant gene owns the body, and the next strongest genes own a belly panel, cheek and back markings, the limbs, and the horn/hair tips. The twelve genes use twelve maximally distinct hard colors. Breeding blends the genomes and the animal forms, so offspring are real hybrids of both parents.
 
 <p align="center">
-  <img src="docs/generations/gen-01.png" width="15%" />
-  <img src="docs/generations/gen-03.png" width="15%" />
-  <img src="docs/generations/gen-05.png" width="15%" />
-  <img src="docs/generations/gen-07.png" width="15%" />
-  <img src="docs/generations/gen-10.png" width="15%" />
+  <img src="docs/generations/fox.png" width="15%" />
+  <img src="docs/generations/lion.png" width="15%" />
+  <img src="docs/generations/deer.png" width="15%" />
+  <img src="docs/generations/elephant.png" width="15%" />
+  <img src="docs/generations/kangaroo.png" width="15%" />
 </p>
 
 ## Screenshots

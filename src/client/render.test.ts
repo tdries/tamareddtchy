@@ -34,9 +34,9 @@ describe("buildCreature", () => {
     expect(buildCreature(genome, 1, 500, monkey).parts.legs.children.length).toBe(2);
   });
 
-  it("colors come from the two dominant genes", () => {
+  it("color zones come from the ordered dominant genes (body != belly)", () => {
     const colors = creatureColors(g({ heart: 200, craft: 150 }));
-    expect(colors.primary).not.toBe(colors.secondary);
+    expect(colors.body).not.toBe(colors.belly); // dominant vs 2nd gene
   });
 
   it("a higher generation deviates the geometry further from baseline", () => {

@@ -129,9 +129,9 @@ export class CreatureScene {
 
   // Swap in a new creature. Cheap enough to call on every genome change. An
   // optional animal form drives the silhouette; omit it for the neutral shape.
-  setCreature(genome: Genome, generation: number, xp: number, form?: AnimalForm) {
+  setCreature(genome: Genome, generation: number, xp: number, form?: AnimalForm, id?: string) {
     this.rig.clear();
-    this.built = buildCreature(genome, generation, xp, form);
+    this.built = buildCreature(genome, generation, xp, form, id);
     // Every solid mesh casts and receives soft shadows.
     this.built.group.traverse((o) => {
       const m = o as THREE.Mesh;

@@ -17,18 +17,19 @@
   --glow: #7a5cff;
 
   /* gene hues, mirrored from render.ts */
-  --g-knowledge: #5b8cff;
-  --g-vitality: #2fd07a;
-  --g-tech: #8a5bff;
-  --g-heart: #ff6f9c;
-  --g-craft: #ffaf45;
-  --g-mayhem: #ff4d4d;
-  --g-pulse: #ff7a3c;
-  --g-lore: #c9a24b;
-  --g-inner: #57c7d4;
-  --g-social: #ffd23f;
-  --g-earth: #6fae5f;
-  --g-fiction: #b05bff;
+  /* 12 maximally distinct hard colors, synced with GENE_COLOR in render.ts */
+  --g-knowledge: #2563eb;
+  --g-tech: #7c3aed;
+  --g-fiction: #c026d3;
+  --g-heart: #ec4899;
+  --g-mayhem: #ef4444;
+  --g-pulse: #f97316;
+  --g-lore: #b45309;
+  --g-social: #fde047;
+  --g-craft: #84cc16;
+  --g-vitality: #22c55e;
+  --g-earth: #14b8a6;
+  --g-inner: #06b6d4;
 }
 
 * { box-sizing: border-box; }
